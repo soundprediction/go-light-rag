@@ -6,7 +6,8 @@ type EntityExtractionPromptData struct {
 	EntityTypes []string
 	Language    string
 	Examples    []EntityExtractionPromptExample
-	Input       string
+
+	Input string
 }
 
 type EntityExtractionPromptExample struct {
@@ -26,8 +27,22 @@ type EntityExtractionPromptRelationshipOutput struct {
 	SourceEntity string
 	TargetEntity string
 	Description  string
-	Keywords     string
+	Keywords     []string
 	Strength     float64
+}
+
+type KeywordExtractionPromptData struct {
+	Goal     string
+	Examples []KeywordExtractionPromptExample
+
+	Query   string
+	History string
+}
+
+type KeywordExtractionPromptExample struct {
+	Query             string
+	LowLevelKeywords  []string
+	HighLevelKeywords []string
 }
 
 const extractEntitiesPrompt = `---Goal---
@@ -56,21 +71,21 @@ Format each relationship as ("relationship"<|><source_entity><|><target_entity><
 ######################
 ---Examples---
 ######################
-{{range $i, $example := .Examples}}
-Example {{$i}}:
+{{- range $i, $example := .Examples}}
+Example {{add $i 1}}:
 
 Text:
 {{$example.Text}}
 ################
 Output:
-  {{range $output := $example.EntitiesOutputs}}
+  {{- range $output := $example.EntitiesOutputs}}
 ("entity"<|>"{{$output.Name}}"<|>"{{$output.Type}}"<|>"{{$output.Description}}")##
-  {{end}}
-  {{range $output := $example.RelationshipsOutputs}}
-("relationship"<|>"{{$output.SourceEntity}}"<|>"{{$output.TargetEntity}}"<|>"{{$output.Description}}"<|>"{{$output.Keywords}}"<|>"{{$output.Strength}}")##
-  {{end}}
+  {{- end}}
+  {{- range $output := $example.RelationshipsOutputs}}
+("relationship"<|>"{{$output.SourceEntity}}"<|>"{{$output.TargetEntity}}"<|>"{{$output.Description}}"<|>"{{range $i, $v := $output.Keywords}}{{if $i}}, {{end}}{{$v}}{{end}}"<|>"{{$output.Strength}}")##
+  {{- end}}
 #############################
-{{end}}
+{{- end}}
 
 #############################
 ---Real Data---
@@ -132,4 +147,53 @@ Entities: {{.EntityName}}
 Description List: {{.Descriptions}}
 #######
 Output:
+`
+
+const keywordExtractionPrompt = `---Role---
+
+You are a helpful assistant tasked with identifying both high-level and low-level keywords in the user's query and conversation history.
+
+---Goal---
+
+{{.Goal}}
+
+---Instructions---
+
+- Consider both the current query and relevant conversation history when extracting keywords
+- Output the keywords in JSON format, it will be parsed by a JSON parser, do not add any extra content in output
+- The JSON should have two keys:
+  - "high_level_keywords" for overarching concepts or themes
+  - "low_level_keywords" for specific entities or details
+
+######################
+---Examples---
+######################
+{{- range $i, $example := .Examples}}
+Example {{add $i 1}}:
+
+Query: {{$example.Query}}
+################
+Output:
+\{
+  "high_level_keywords": [{{range $i, $v := $example.HighLevelKeywords}}{{if $i}}, {{end}}"{{$v}}"{{end}}],
+  "low_level_keywords": [{{range $i, $v := $example.LowLevelKeywords}}{{if $i}}, {{end}}"{{$v}}"{{end}}]
+\}
+  {{- range $output := $example.EntitiesOutputs}}
+("entity"<|>"{{$output.Name}}"<|>"{{$output.Type}}"<|>"{{$output.Description}}")##
+  {{- end}}
+  {{- range $output := $example.RelationshipsOutputs}}
+("relationship"<|>"{{$output.SourceEntity}}"<|>"{{$output.TargetEntity}}"<|>"{{$output.Description}}"<|>"{{range $i, $v := $output.Keywords}}{{if $i}}, {{end}}{{$v}}{{end}}"<|>"{{$output.Strength}}")##
+  {{- end}}
+#############################
+{{- end}}
+-Real Data-
+######################
+Conversation History:
+{{.History}}
+
+Current Query: {{.Query}}
+######################
+The "Output" should be human text, not unicode characters. Keep the same language as "Query".
+Output:
+
 `

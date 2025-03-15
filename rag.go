@@ -8,17 +8,6 @@ import (
 	"time"
 )
 
-type Document interface {
-	ID() string
-	Content() string
-}
-
-type DocumentProcessor interface {
-	ChunksDocument(content string) ([]Source, error)
-	EntityExtractionPromptData() EntityExtractionPromptData
-	LLM() LLM
-}
-
 type LLM interface {
 	Chat(messages []string) (string, error)
 	MaxRetries() int
@@ -32,16 +21,22 @@ type GraphStorage interface {
 
 	GraphUpsertEntity(entity GraphEntity) error
 	GraphUpsertRelationship(relationship GraphRelationship) error
+
+	GraphCountEntityRelationships(name string) (int, error)
+	GraphRelatedEntities(name string) ([]GraphEntity, error)
 }
 
 type VectorStorage interface {
-	VectorUpsertEntity(entity GraphEntity) error
-	VectorUpsertRelationship(relationship GraphRelationship) error
-	VectorUpsertSources(id string, sources []Source) error
+	VectorQueryEntity(keywords string) ([]string, error)
+	VectorQueryRelationship(keywords string) ([][2]string, error)
+
+	VectorUpsertEntity(name, content string) error
+	VectorUpsertRelationship(source, target, content string) error
 }
 
 type KeyValueStorage interface {
-	KVUpsertSources(id string, sources []Source) error
+	KVSource(id string) (Source, error)
+	KVUpsertSources(sources []Source) error
 }
 
 type Storage interface {
@@ -51,6 +46,7 @@ type Storage interface {
 }
 
 type Source struct {
+	ID         string
 	Content    string
 	TokenSize  int
 	OrderIndex int
@@ -87,9 +83,14 @@ func cleanContent(content string) string {
 
 func promptTemplate(name, templ string, data any) (string, error) {
 	buf := strings.Builder{}
-	tmpl := template.Must(template.New(name).Parse(templ))
+	tmpl := template.New(name).Funcs(template.FuncMap{
+		"add": func(a, b int) int {
+			return a + b
+		},
+	})
+	tmpl = template.Must(tmpl.Parse(templ))
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("failed to execute template: %v", err)
+		return "", fmt.Errorf("failed to execute template: %w", err)
 	}
 
 	return buf.String(), nil
@@ -127,6 +128,10 @@ func mostFrequentItem(list []string) string {
 	return mostFreqItem
 }
 
-func (s Source) GenID(docID string) string {
+func threeBacktick(caption string) string {
+	return "```" + caption
+}
+
+func (s Source) genID(docID string) string {
 	return fmt.Sprintf("%s-chunk-%d", docID, s.OrderIndex)
 }

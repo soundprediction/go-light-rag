@@ -19,10 +19,9 @@ func TestInsert(t *testing.T) {
 	}))
 
 	t.Run("Successful insertion", func(t *testing.T) {
-		// Create mock objects
-		doc := MockDocument{
-			id:      "test-doc-1",
-			content: "Test content with null byte \x00 and spaces   ",
+		doc := golightrag.Document{
+			ID:      "test-doc-1",
+			Content: "Test content with null byte \x00 and spaces   ",
 		}
 
 		// Create mock LLM that returns valid entity and relationship extraction
@@ -37,8 +36,8 @@ func TestInsert(t *testing.T) {
 			chatCalls:   make([][]string, 0),
 		}
 
-		// Create mock processor
-		processor := &MockDocumentProcessor{
+		// Create mock handler
+		handler := &MockDocumentHandler{
 			sources: []golightrag.Source{
 				{
 					Content:    "Test content",
@@ -61,18 +60,30 @@ func TestInsert(t *testing.T) {
 		}
 
 		// Call the function under test
-		err := golightrag.Insert(doc, processor, storage, logger)
+		err := golightrag.Insert(doc, handler, storage, logger)
 		// Assertions
 		if err != nil {
 			t.Errorf("Expected no error, got %v", err)
 		}
 
-		if !storage.vectorUpsertSourcesCalled {
-			t.Error("Expected VectorUpsertSources to be called")
-		}
-
 		if !storage.kvUpsertSourcesCalled {
 			t.Error("Expected KVUpsertSources to be called")
+		}
+
+		if !storage.graphUpsertEntityCalled {
+			t.Error("Expected GraphUpsertEntity to be called")
+		}
+
+		if !storage.vectorUpsertEntityCalled {
+			t.Error("Expected VectorUpsertEntity to be called")
+		}
+
+		if !storage.graphUpsertRelationshipCalled {
+			t.Error("Expected GraphUpsertRelationship to be called")
+		}
+
+		if !storage.vectorUpsertRelationshipCalled {
+			t.Error("Expected VectorUpsertRelationship to be called")
 		}
 
 		// Verify that entities were extracted and stored
@@ -92,7 +103,7 @@ func TestInsert(t *testing.T) {
 				t.Errorf("Expected ENTITY1 description to contain 'description of Entity1', got %s", entity1.Descriptions)
 			}
 			// Check source ID
-			expectedSourceID := fmt.Sprintf("%s-chunk-0", doc.id)
+			expectedSourceID := fmt.Sprintf("%s-chunk-0", doc.ID)
 			if !strings.Contains(entity1.SourceIDs, expectedSourceID) {
 				t.Errorf("Expected source ID %s in entity SourceIDs: %s", expectedSourceID, entity1.SourceIDs)
 			}
@@ -134,7 +145,7 @@ func TestInsert(t *testing.T) {
 			if !strings.Contains(rel.Keywords, "RELATED_TO") {
 				t.Errorf("Expected relationship keywords to contain 'RELATED_TO', got %s", rel.Keywords)
 			}
-			expectedSourceID := fmt.Sprintf("%s-chunk-0", doc.id)
+			expectedSourceID := fmt.Sprintf("%s-chunk-0", doc.ID)
 			if !strings.Contains(rel.SourceIDs, expectedSourceID) {
 				t.Errorf("Expected source ID %s in relationship SourceIDs: %s", expectedSourceID, rel.SourceIDs)
 			}
@@ -142,10 +153,9 @@ func TestInsert(t *testing.T) {
 	})
 
 	t.Run("Invalid entity extraction format", func(t *testing.T) {
-		// Create mock objects
-		doc := MockDocument{
-			id:      "test-doc-6",
-			content: "Test content",
+		doc := golightrag.Document{
+			ID:      "test-doc-6",
+			Content: "Test content",
 		}
 
 		// Create mock LLM that returns invalid format
@@ -156,8 +166,8 @@ func TestInsert(t *testing.T) {
 			maxTokenLen:  1000,
 		}
 
-		// Create mock processor
-		processor := &MockDocumentProcessor{
+		// Create mock handler
+		handler := &MockDocumentHandler{
 			sources: []golightrag.Source{
 				{
 					Content:    "Test content",
@@ -177,7 +187,7 @@ func TestInsert(t *testing.T) {
 		storage := &MockStorage{}
 
 		// Call the function under test
-		err := golightrag.Insert(doc, processor, storage, logger)
+		err := golightrag.Insert(doc, handler, storage, logger)
 
 		// Assertions
 		if err == nil {
@@ -186,14 +196,13 @@ func TestInsert(t *testing.T) {
 	})
 
 	t.Run("Error in chunking document", func(t *testing.T) {
-		// Create mock objects
-		doc := MockDocument{
-			id:      "test-doc-2",
-			content: "Test content",
+		doc := golightrag.Document{
+			ID:      "test-doc-2",
+			Content: "Test content",
 		}
 
-		// Create mock processor with error
-		processor := &MockDocumentProcessor{
+		// Create mock handler with error
+		handler := &MockDocumentHandler{
 			chunkErr: errors.New("chunk error"),
 		}
 
@@ -201,15 +210,11 @@ func TestInsert(t *testing.T) {
 		storage := &MockStorage{}
 
 		// Call the function under test
-		err := golightrag.Insert(doc, processor, storage, logger)
+		err := golightrag.Insert(doc, handler, storage, logger)
 
 		// Assertions
 		if err == nil {
 			t.Error("Expected error, got nil")
-		}
-
-		if storage.vectorUpsertSourcesCalled {
-			t.Error("Expected VectorUpsertSources not to be called")
 		}
 
 		if storage.kvUpsertSourcesCalled {
@@ -217,51 +222,14 @@ func TestInsert(t *testing.T) {
 		}
 	})
 
-	t.Run("Error in vector upsert", func(t *testing.T) {
-		// Create mock objects
-		doc := MockDocument{
-			id:      "test-doc-3",
-			content: "Test content",
-		}
-
-		// Create mock processor
-		processor := &MockDocumentProcessor{
-			sources: []golightrag.Source{
-				{
-					Content:    "Test content",
-					TokenSize:  2,
-					OrderIndex: 0,
-				},
-			},
-		}
-
-		// Create mock storage with error
-		storage := &MockStorage{
-			vectorUpsertSourcesErr: errors.New("vector upsert error"),
-		}
-
-		// Call the function under test
-		err := golightrag.Insert(doc, processor, storage, logger)
-
-		// Assertions
-		if err == nil {
-			t.Error("Expected error, got nil")
-		}
-
-		if !storage.vectorUpsertSourcesCalled {
-			t.Error("Expected VectorUpsertSources to be called")
-		}
-	})
-
 	t.Run("Error in KV upsert", func(t *testing.T) {
-		// Create mock objects
-		doc := MockDocument{
-			id:      "test-doc-4",
-			content: "Test content",
+		doc := golightrag.Document{
+			ID:      "test-doc-4",
+			Content: "Test content",
 		}
 
-		// Create mock processor
-		processor := &MockDocumentProcessor{
+		// Create mock handler
+		handler := &MockDocumentHandler{
 			sources: []golightrag.Source{
 				{
 					Content:    "Test content",
@@ -277,15 +245,11 @@ func TestInsert(t *testing.T) {
 		}
 
 		// Call the function under test
-		err := golightrag.Insert(doc, processor, storage, logger)
+		err := golightrag.Insert(doc, handler, storage, logger)
 
 		// Assertions
 		if err == nil {
 			t.Error("Expected error, got nil")
-		}
-
-		if !storage.vectorUpsertSourcesCalled {
-			t.Error("Expected VectorUpsertSources to be called")
 		}
 
 		if !storage.kvUpsertSourcesCalled {
@@ -294,10 +258,9 @@ func TestInsert(t *testing.T) {
 	})
 
 	t.Run("Error in entity extraction", func(t *testing.T) {
-		// Create mock objects
-		doc := MockDocument{
-			id:      "test-doc-5",
-			content: "Test content",
+		doc := golightrag.Document{
+			ID:      "test-doc-5",
+			Content: "Test content",
 		}
 
 		// Create mock LLM with error
@@ -308,8 +271,8 @@ func TestInsert(t *testing.T) {
 			maxTokenLen: 1000,
 		}
 
-		// Create mock processor
-		processor := &MockDocumentProcessor{
+		// Create mock handler
+		handler := &MockDocumentHandler{
 			sources: []golightrag.Source{
 				{
 					Content:    "Test content",
@@ -329,7 +292,7 @@ func TestInsert(t *testing.T) {
 		storage := &MockStorage{}
 
 		// Call the function under test
-		err := golightrag.Insert(doc, processor, storage, logger)
+		err := golightrag.Insert(doc, handler, storage, logger)
 
 		// Assertions
 		if err == nil {

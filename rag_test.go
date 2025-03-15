@@ -1,21 +1,22 @@
 package golightrag_test
 
 import (
+	"errors"
 	"fmt"
 
 	golightrag "github.com/MegaGrindStone/go-light-rag"
 )
 
-type MockDocument struct {
-	id      string
-	content string
-}
-
-type MockDocumentProcessor struct {
+type MockDocumentHandler struct {
 	chunkErr                   error
 	sources                    []golightrag.Source
 	entityExtractionPromptData golightrag.EntityExtractionPromptData
 	llm                        golightrag.LLM
+}
+
+type MockQueryHandler struct {
+	keywordExtractionPromptData golightrag.KeywordExtractionPromptData
+	llm                         golightrag.LLM
 }
 
 type MockLLM struct {
@@ -30,7 +31,6 @@ type MockLLM struct {
 }
 
 type MockStorage struct {
-	vectorUpsertSourcesErr      error
 	kvUpsertSourcesErr          error
 	graphEntityErr              error
 	graphRelationshipErr        error
@@ -40,34 +40,48 @@ type MockStorage struct {
 	vectorUpsertRelationshipErr error
 
 	// Track calls to methods
-	vectorUpsertSourcesCalled bool
-	kvUpsertSourcesCalled     bool
+	kvUpsertSourcesCalled          bool
+	graphEntityCalled              bool
+	graphRelationshipCalled        bool
+	graphUpsertEntityCalled        bool
+	graphUpsertRelationshipCalled  bool
+	vectorUpsertEntityCalled       bool
+	vectorUpsertRelationshipCalled bool
 
 	// Track entities and relationships
 	entities      map[string]golightrag.GraphEntity
 	relationships map[string]golightrag.GraphRelationship
+
+	sources                        map[string]golightrag.Source
+	vectorQueryEntityResults       []string
+	vectorQueryRelationshipResults [][2]string
+	entityRelatedEntitiesMap       map[string][]golightrag.GraphEntity
+	entityRelationshipCountMap     map[string]int
+
+	vectorQueryEntityErr       error
+	vectorQueryRelationshipErr error
 }
 
-func (m MockDocument) ID() string {
-	return m.id
-}
-
-func (m MockDocument) Content() string {
-	return m.content
-}
-
-func (m *MockDocumentProcessor) ChunksDocument(string) ([]golightrag.Source, error) {
+func (m *MockDocumentHandler) ChunksDocument(string) ([]golightrag.Source, error) {
 	if m.chunkErr != nil {
 		return nil, m.chunkErr
 	}
 	return m.sources, nil
 }
 
-func (m *MockDocumentProcessor) EntityExtractionPromptData() golightrag.EntityExtractionPromptData {
+func (m *MockDocumentHandler) EntityExtractionPromptData() golightrag.EntityExtractionPromptData {
 	return m.entityExtractionPromptData
 }
 
-func (m *MockDocumentProcessor) LLM() golightrag.LLM {
+func (m *MockDocumentHandler) LLM() golightrag.LLM {
+	return m.llm
+}
+
+func (m *MockQueryHandler) KeywordExtractionPromptData() golightrag.KeywordExtractionPromptData {
+	return m.keywordExtractionPromptData
+}
+
+func (m *MockQueryHandler) LLM() golightrag.LLM {
 	return m.llm
 }
 
@@ -95,17 +109,20 @@ func (m *MockLLM) MaxSummariesTokenLength() int {
 	return m.maxTokenLen
 }
 
-func (m *MockStorage) VectorUpsertSources(string, []golightrag.Source) error {
-	m.vectorUpsertSourcesCalled = true
-	return m.vectorUpsertSourcesErr
+func (m *MockStorage) KVSource(id string) (golightrag.Source, error) {
+	if source, ok := m.sources[id]; ok {
+		return source, nil
+	}
+	return golightrag.Source{}, errors.New("source not found")
 }
 
-func (m *MockStorage) KVUpsertSources(string, []golightrag.Source) error {
+func (m *MockStorage) KVUpsertSources(sources []golightrag.Source) error {
 	m.kvUpsertSourcesCalled = true
 	return m.kvUpsertSourcesErr
 }
 
 func (m *MockStorage) GraphEntity(name string) (golightrag.GraphEntity, error) {
+	m.graphEntityCalled = true
 	if m.graphEntityErr != nil {
 		return golightrag.GraphEntity{}, m.graphEntityErr
 	}
@@ -119,6 +136,7 @@ func (m *MockStorage) GraphEntity(name string) (golightrag.GraphEntity, error) {
 }
 
 func (m *MockStorage) GraphRelationship(sourceEntity, targetEntity string) (golightrag.GraphRelationship, error) {
+	m.graphRelationshipCalled = true
 	if m.graphRelationshipErr != nil {
 		return golightrag.GraphRelationship{}, m.graphRelationshipErr
 	}
@@ -133,6 +151,7 @@ func (m *MockStorage) GraphRelationship(sourceEntity, targetEntity string) (goli
 }
 
 func (m *MockStorage) GraphUpsertEntity(entity golightrag.GraphEntity) error {
+	m.graphUpsertEntityCalled = true
 	if m.graphUpsertEntityErr != nil {
 		return m.graphUpsertEntityErr
 	}
@@ -146,21 +165,13 @@ func (m *MockStorage) GraphUpsertEntity(entity golightrag.GraphEntity) error {
 	return nil
 }
 
-func (m *MockStorage) VectorUpsertEntity(entity golightrag.GraphEntity) error {
-	if m.vectorUpsertEntityErr != nil {
-		return m.vectorUpsertEntityErr
-	}
-
-	if m.entities == nil {
-		m.entities = make(map[string]golightrag.GraphEntity)
-	}
-
-	// For simplicity, we'll store in the same map
-	m.entities[entity.Name] = entity
-	return nil
+func (m *MockStorage) VectorUpsertEntity(name, content string) error {
+	m.vectorUpsertEntityCalled = true
+	return m.vectorUpsertEntityErr
 }
 
-func (m *MockStorage) GraphUpsertRelationship(rel golightrag.GraphRelationship) error {
+func (m *MockStorage) GraphUpsertRelationship(relationship golightrag.GraphRelationship) error {
+	m.graphUpsertRelationshipCalled = true
 	if m.graphUpsertRelationshipErr != nil {
 		return m.graphUpsertRelationshipErr
 	}
@@ -170,22 +181,40 @@ func (m *MockStorage) GraphUpsertRelationship(rel golightrag.GraphRelationship) 
 	}
 
 	// Store the relationship
-	key := fmt.Sprintf("%s:%s", rel.SourceEntity, rel.TargetEntity)
-	m.relationships[key] = rel
+	key := fmt.Sprintf("%s:%s", relationship.SourceEntity, relationship.TargetEntity)
+	m.relationships[key] = relationship
 	return nil
 }
 
-func (m *MockStorage) VectorUpsertRelationship(rel golightrag.GraphRelationship) error {
-	if m.vectorUpsertRelationshipErr != nil {
-		return m.vectorUpsertRelationshipErr
-	}
+func (m *MockStorage) VectorUpsertRelationship(source, target, content string) error {
+	m.vectorUpsertRelationshipCalled = true
+	return m.vectorUpsertRelationshipErr
+}
 
-	if m.relationships == nil {
-		m.relationships = make(map[string]golightrag.GraphRelationship)
+func (m *MockStorage) GraphCountEntityRelationships(name string) (int, error) {
+	if count, ok := m.entityRelationshipCountMap[name]; ok {
+		return count, nil
 	}
+	return 0, nil
+}
 
-	// For simplicity, we'll store in the same map
-	key := fmt.Sprintf("%s:%s", rel.SourceEntity, rel.TargetEntity)
-	m.relationships[key] = rel
-	return nil
+func (m *MockStorage) GraphRelatedEntities(name string) ([]golightrag.GraphEntity, error) {
+	if entities, ok := m.entityRelatedEntitiesMap[name]; ok {
+		return entities, nil
+	}
+	return []golightrag.GraphEntity{}, nil
+}
+
+func (m *MockStorage) VectorQueryEntity(keywords string) ([]string, error) {
+	if m.vectorQueryEntityErr != nil {
+		return nil, m.vectorQueryEntityErr
+	}
+	return m.vectorQueryEntityResults, nil
+}
+
+func (m *MockStorage) VectorQueryRelationship(keywords string) ([][2]string, error) {
+	if m.vectorQueryRelationshipErr != nil {
+		return nil, m.vectorQueryRelationshipErr
+	}
+	return m.vectorQueryRelationshipResults, nil
 }

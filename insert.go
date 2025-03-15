@@ -13,12 +13,16 @@ import (
 	"github.com/MegaGrindStone/go-light-rag/internal"
 )
 
-const (
-	fieldDelimiter      = "<|>"
-	recordDelimiter     = "##"
-	completeDelimiter   = "<|COMPLETE|>"
-	graphFieldSeparator = "<SEP>"
-)
+type DocumentHandler interface {
+	ChunksDocument(content string) ([]Source, error)
+	EntityExtractionPromptData() EntityExtractionPromptData
+	LLM() LLM
+}
+
+type Document struct {
+	ID      string
+	Content string
+}
 
 type summarizeDescriptionsPromptData struct {
 	EntityName   string
@@ -26,31 +30,45 @@ type summarizeDescriptionsPromptData struct {
 	Language     string
 }
 
+const (
+	fieldDelimiter      = "<|>"
+	recordDelimiter     = "##"
+	completeDelimiter   = "<|COMPLETE|>"
+	graphFieldSeparator = "<SEP>"
+)
+
 // Insert inserts a document into the storage that can be retreived later with Query.
-func Insert(doc Document, processor DocumentProcessor, storage Storage, logger *slog.Logger) error {
-	content := cleanContent(doc.Content())
+func Insert(doc Document, handler DocumentHandler, storage Storage, logger *slog.Logger) error {
+	content := cleanContent(doc.Content)
 
 	logger = logger.With(
 		slog.String("package", "golightrag"),
 		slog.String("function", "Insert"),
 	)
 
-	chunks, err := processor.ChunksDocument(content)
+	chunks, err := handler.ChunksDocument(content)
 	if err != nil {
 		return fmt.Errorf("failed to chunk string: %w", err)
 	}
 
-	logger.Info("Upserting sources", "count", len(chunks))
-
-	if err := storage.VectorUpsertSources(doc.ID(), chunks); err != nil {
-		return fmt.Errorf("failed to upsert sources: %w", err)
+	chunksWithID := make([]Source, len(chunks))
+	for i, chunk := range chunks {
+		id := chunk.genID(doc.ID)
+		chunksWithID[i] = Source{
+			ID:         id,
+			Content:    chunk.Content,
+			TokenSize:  chunk.TokenSize,
+			OrderIndex: chunk.OrderIndex,
+		}
 	}
 
-	if err := storage.KVUpsertSources(doc.ID(), chunks); err != nil {
+	logger.Info("Upserting sources", "count", len(chunks))
+
+	if err := storage.KVUpsertSources(chunksWithID); err != nil {
 		return fmt.Errorf("failed to upsert sources kv: %w", err)
 	}
 
-	if err := extractEntities(doc.ID(), chunks, processor, storage, logger); err != nil {
+	if err := extractEntities(doc.ID, chunks, handler, storage, logger); err != nil {
 		return fmt.Errorf("failed to extract entities: %w", err)
 	}
 
@@ -60,7 +78,7 @@ func Insert(doc Document, processor DocumentProcessor, storage Storage, logger *
 func extractEntities(
 	docID string,
 	sources []Source,
-	processor DocumentProcessor,
+	handler DocumentHandler,
 	storage Storage,
 	logger *slog.Logger,
 ) error {
@@ -70,11 +88,11 @@ func extractEntities(
 		return orderedSources[i].OrderIndex < orderedSources[j].OrderIndex
 	})
 
-	extractPromptData := processor.EntityExtractionPromptData()
+	extractPromptData := handler.EntityExtractionPromptData()
 
 	logger.Info("Extracting entities", "count", len(orderedSources))
 
-	llm := processor.LLM()
+	llm := handler.LLM()
 	for i, source := range orderedSources {
 		entities, relationships, err := llmExtractEntities(source.Content, extractPromptData, llm, logger)
 		if err != nil {
@@ -84,14 +102,14 @@ func extractEntities(
 		logger.Info("Done call LLM", "entities", len(entities), "relationships", len(relationships))
 
 		for name, unmergedEntities := range entities {
-			if err := mergeGraphEntities(name, source.GenID(docID), extractPromptData.Language,
+			if err := mergeGraphEntities(name, source.genID(docID), extractPromptData.Language,
 				unmergedEntities, storage, llm, logger); err != nil {
 				return fmt.Errorf("failed to process graph entity: %w", err)
 			}
 		}
 
 		for key, unmergedRelationships := range relationships {
-			if err := mergeGraphRelationships(key, source.GenID(docID), extractPromptData.Language,
+			if err := mergeGraphRelationships(key, source.genID(docID), extractPromptData.Language,
 				unmergedRelationships, storage, llm, logger); err != nil {
 				return fmt.Errorf("failed to process graph relationship: %w", err)
 			}
@@ -357,7 +375,7 @@ func mergeGraphEntities(
 		return fmt.Errorf("failed to upsert graph entity in graph storage: %w", err)
 	}
 
-	if err := storage.VectorUpsertEntity(ent); err != nil {
+	if err := storage.VectorUpsertEntity(ent.Name, ent.Name+ent.Descriptions); err != nil {
 		return fmt.Errorf("failed to upsert entity in vector storage: %w", err)
 	}
 
@@ -461,7 +479,8 @@ func mergeGraphRelationships(
 		return fmt.Errorf("failed to upsert graph relationship: %w", err)
 	}
 
-	if err := storage.VectorUpsertRelationship(rel); err != nil {
+	content := rel.Keywords + rel.SourceEntity + rel.TargetEntity + rel.Descriptions
+	if err := storage.VectorUpsertRelationship(rel.SourceEntity, rel.TargetEntity, content); err != nil {
 		return fmt.Errorf("failed to upsert relationship vector: %w", err)
 	}
 
