@@ -13,3 +13,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `Insert` function.
 - Base interfaces to be used by `Query` and `Insert`.
 - Add `Neo4J` struct to interact with Neo4j graph database.
+- Add `Chromem` struct to interact with `chromem-go` vector database.
