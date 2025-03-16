@@ -3,8 +3,8 @@ package golightrag_test
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
-	"os"
 	"strings"
 	"testing"
 
@@ -13,10 +13,10 @@ import (
 
 //nolint:gocognit
 func TestInsert(t *testing.T) {
-	// logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-	}))
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	// logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+	// 	Level: slog.LevelDebug,
+	// }))
 
 	t.Run("Successful insertion", func(t *testing.T) {
 		doc := golightrag.Document{

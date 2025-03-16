@@ -3,18 +3,20 @@ package golightrag_test
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
-	"os"
+	"strings"
 	"testing"
+	"time"
 
 	golightrag "github.com/MegaGrindStone/go-light-rag"
 )
 
 func TestQuery(t *testing.T) {
-	// logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-	}))
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	// logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+	// 	Level: slog.LevelDebug,
+	// }))
 
 	t.Run("Successful query", func(t *testing.T) {
 		// Mock conversations
@@ -321,6 +323,149 @@ func TestQuery(t *testing.T) {
 		}
 		if len(result.GlobalEntities) != 0 {
 			t.Errorf("Expected 0 global entities, got %d", len(result.GlobalEntities))
+		}
+	})
+}
+
+func TestQueryResultString(t *testing.T) {
+	t.Run("Result with sorting by reference count", func(t *testing.T) {
+		// Create a sample QueryResult with items having different reference counts
+		result := golightrag.QueryResult{
+			GlobalEntities: []golightrag.EntityContext{
+				{
+					Name:        "GlobalEntityLow",
+					Type:        "PERSON",
+					Description: "Low ref count entity",
+					RefCount:    1,
+					CreatedAt:   time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC),
+				},
+			},
+			LocalEntities: []golightrag.EntityContext{
+				{
+					Name:        "LocalEntityHigh",
+					Type:        "ORGANIZATION",
+					Description: "High ref count entity",
+					RefCount:    5,
+					CreatedAt:   time.Date(2023, 1, 2, 0, 0, 0, 0, time.UTC),
+				},
+			},
+			GlobalRelationships: []golightrag.RelationshipContext{
+				{
+					Source:      "SourceLow",
+					Target:      "TargetLow",
+					Keywords:    "low_ref",
+					Description: "Low ref count relationship",
+					Weight:      0.5,
+					RefCount:    2,
+					CreatedAt:   time.Date(2023, 1, 3, 0, 0, 0, 0, time.UTC),
+				},
+			},
+			LocalRelationships: []golightrag.RelationshipContext{
+				{
+					Source:      "SourceHigh",
+					Target:      "TargetHigh",
+					Keywords:    "high_ref",
+					Description: "High ref count relationship",
+					Weight:      0.8,
+					RefCount:    7,
+					CreatedAt:   time.Date(2023, 1, 4, 0, 0, 0, 0, time.UTC),
+				},
+			},
+			GlobalSources: []golightrag.SourceContext{
+				{
+					Content:  "Low ref source",
+					RefCount: 3,
+				},
+			},
+			LocalSources: []golightrag.SourceContext{
+				{
+					Content:  "High ref source",
+					RefCount: 10,
+				},
+			},
+		}
+
+		// Call the String method
+		output := result.String()
+
+		// Check that the output has the three sections
+		if !strings.Contains(output, "-----Entities-----") {
+			t.Error("Output missing Entities section")
+		}
+		if !strings.Contains(output, "-----Relationships-----") {
+			t.Error("Output missing Relationships section")
+		}
+		if !strings.Contains(output, "-----Sources-----") {
+			t.Error("Output missing Sources section")
+		}
+
+		// Check that the output contains CSV content wrapped in backticks
+		if !strings.Contains(output, "```csv") {
+			t.Error("Output missing CSV format markers")
+		}
+
+		// Check that all entities, relationships, and sources are present
+		expectedStrings := []string{
+			"LocalEntityHigh", "ORGANIZATION", "High ref count entity",
+			"GlobalEntityLow", "PERSON", "Low ref count entity",
+			"SourceHigh", "TargetHigh", "high_ref", "High ref count relationship",
+			"SourceLow", "TargetLow", "low_ref", "Low ref count relationship",
+			"High ref source", "Low ref source",
+		}
+
+		for _, str := range expectedStrings {
+			if !strings.Contains(output, str) {
+				t.Errorf("Output missing expected content: %s", str)
+			}
+		}
+
+		// Check ordering by reference count (higher ref count should come first)
+		highEntityIdx := strings.Index(output, "LocalEntityHigh")
+		lowEntityIdx := strings.Index(output, "GlobalEntityLow")
+		if highEntityIdx > lowEntityIdx && highEntityIdx != -1 && lowEntityIdx != -1 {
+			t.Error("Entity with higher ref count should come before entity with lower ref count")
+		}
+
+		highRelIdx := strings.Index(output, "SourceHigh")
+		lowRelIdx := strings.Index(output, "SourceLow")
+		if highRelIdx > lowRelIdx && highRelIdx != -1 && lowRelIdx != -1 {
+			t.Error("Relationship with higher ref count should come before relationship with lower ref count")
+		}
+
+		highSourceIdx := strings.Index(output, "High ref source")
+		lowSourceIdx := strings.Index(output, "Low ref source")
+		if highSourceIdx > lowSourceIdx && highSourceIdx != -1 && lowSourceIdx != -1 {
+			t.Error("Source with higher ref count should come before source with lower ref count")
+		}
+	})
+
+	t.Run("Empty result", func(t *testing.T) {
+		// Create an empty QueryResult
+		result := golightrag.QueryResult{}
+
+		// Call the String method
+		output := result.String()
+
+		// Verify the output has the section headers
+		if !strings.Contains(output, "-----Entities-----") {
+			t.Error("Output missing Entities section")
+		}
+		if !strings.Contains(output, "-----Relationships-----") {
+			t.Error("Output missing Relationships section")
+		}
+		if !strings.Contains(output, "-----Sources-----") {
+			t.Error("Output missing Sources section")
+		}
+
+		// The output should still have CSV headers even with empty data
+		if !strings.Contains(output, "id,name,type,description,ref_count,created_at") {
+			t.Error("Output missing entity CSV header")
+		}
+		if !strings.Contains(output, "id,source,target,keywords,description,weight,ref_count,created_at") {
+			t.Error("Output missing relationship CSV header")
+		}
+		if !strings.Contains(output, "id,content,ref_count") {
+			t.Error("Output missing source CSV header")
 		}
 	})
 }

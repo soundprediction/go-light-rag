@@ -523,7 +523,7 @@ func (q QueryResult) String() string {
 		}
 	}
 	relationships := combineContexts(
-		[]string{"source", "target", "keywords", "description", "weight", "ref_count", "created_at"},
+		[]string{"id", "source", "target", "keywords", "description", "weight", "ref_count", "created_at"},
 		globalRelationships, localRelationships)
 
 	globalSources := make([]refContext, len(q.GlobalSources))
