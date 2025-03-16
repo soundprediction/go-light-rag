@@ -1,6 +1,10 @@
 //nolint:lll
 package golightrag
 
+// EntityExtractionPromptData contains the data needed to generate prompts
+// for extracting entities and relationships from text content.
+// It includes the goal of extraction, valid entity types, target language,
+// example extractions, and the input text to be processed.
 type EntityExtractionPromptData struct {
 	Goal        string
 	EntityTypes []string
@@ -10,6 +14,10 @@ type EntityExtractionPromptData struct {
 	Input string
 }
 
+// EntityExtractionPromptExample provides sample inputs and outputs
+// for demonstrating entity extraction to language models.
+// It includes sample text content along with the expected entities
+// and relationships that should be extracted from the text.
 type EntityExtractionPromptExample struct {
 	EntityTypes          []string
 	Text                 string
@@ -17,12 +25,19 @@ type EntityExtractionPromptExample struct {
 	RelationshipsOutputs []EntityExtractionPromptRelationshipOutput
 }
 
+// EntityExtractionPromptEntityOutput represents the expected output format
+// for an entity identified during extraction.
+// It includes the entity's name, type, and description.
 type EntityExtractionPromptEntityOutput struct {
 	Name        string
 	Type        string
 	Description string
 }
 
+// EntityExtractionPromptRelationshipOutput represents the expected output format
+// for a relationship identified between entities during extraction.
+// It includes source and target entities, description, relevant keywords,
+// and a strength value indicating the relationship's importance.
 type EntityExtractionPromptRelationshipOutput struct {
 	SourceEntity string
 	TargetEntity string
@@ -31,6 +46,10 @@ type EntityExtractionPromptRelationshipOutput struct {
 	Strength     float64
 }
 
+// KeywordExtractionPromptData contains the data needed to generate prompts
+// for extracting keywords from user queries and conversation history.
+// It includes the goal of keyword extraction, examples for demonstration,
+// the current query, and relevant conversation history.
 type KeywordExtractionPromptData struct {
 	Goal     string
 	Examples []KeywordExtractionPromptExample
@@ -39,6 +58,10 @@ type KeywordExtractionPromptData struct {
 	History string
 }
 
+// KeywordExtractionPromptExample provides sample inputs and outputs
+// for demonstrating keyword extraction to language models.
+// It includes a sample query along with expected high-level and low-level
+// keywords that should be extracted from the query.
 type KeywordExtractionPromptExample struct {
 	Query             string
 	LowLevelKeywords  []string

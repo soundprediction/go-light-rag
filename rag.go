@@ -8,13 +8,22 @@ import (
 	"time"
 )
 
+// LLM defines the interface for language model operations.
+// It provides methods for chat interaction, handling retries,
+// extracting information, and managing token limits.
 type LLM interface {
 	Chat(messages []string) (string, error)
+	// MaxRetries determines the maximum number of retries allowed for the Chat function.
+	// This is especially used when extracting entities and relationships from text content,
+	// due to the incorrect format that sometimes LLM returns.
 	MaxRetries() int
 	GleanCount() int
 	MaxSummariesTokenLength() int
 }
 
+// GraphStorage defines the interface for graph database operations.
+// It provides methods to query and manipulate entities and relationships
+// in a knowledge graph.
 type GraphStorage interface {
 	GraphEntity(name string) (GraphEntity, error)
 	GraphRelationship(sourceEntity, targetEntity string) (GraphRelationship, error)
@@ -26,6 +35,9 @@ type GraphStorage interface {
 	GraphRelatedEntities(name string) ([]GraphEntity, error)
 }
 
+// VectorStorage defines the interface for vector database operations.
+// It provides methods to query and store entities and relationships
+// in a vector space for semantic search capabilities.
 type VectorStorage interface {
 	VectorQueryEntity(keywords string) ([]string, error)
 	VectorQueryRelationship(keywords string) ([][2]string, error)
@@ -34,17 +46,24 @@ type VectorStorage interface {
 	VectorUpsertRelationship(source, target, content string) error
 }
 
+// KeyValueStorage defines the interface for key-value storage operations.
+// It provides methods to access and store source documents.
 type KeyValueStorage interface {
 	KVSource(id string) (Source, error)
 	KVUpsertSources(sources []Source) error
 }
 
+// Storage is a composite interface that combines GraphStorage,
+// VectorStorage, and KeyValueStorage interfaces to provide
+// comprehensive data storage capabilities.
 type Storage interface {
 	GraphStorage
 	VectorStorage
 	KeyValueStorage
 }
 
+// Source represents a document chunk with metadata.
+// It contains the text content, size information, and position data.
 type Source struct {
 	ID         string
 	Content    string
@@ -52,6 +71,9 @@ type Source struct {
 	OrderIndex int
 }
 
+// GraphEntity represents an entity in the knowledge graph.
+// It contains information about the entity's name, type,
+// descriptions, sources, and creation timestamp.
 type GraphEntity struct {
 	Name         string
 	Type         string
@@ -60,6 +82,9 @@ type GraphEntity struct {
 	CreatedAt    time.Time
 }
 
+// GraphRelationship represents a relationship between two entities in the knowledge graph.
+// It contains information about the source and target entities,
+// relationship weight, descriptions, keywords, sources, and creation timestamp.
 type GraphRelationship struct {
 	SourceEntity string
 	TargetEntity string
@@ -71,7 +96,9 @@ type GraphRelationship struct {
 }
 
 var (
-	ErrEntityNotFound       = errors.New("entity not found")
+	// ErrEntityNotFound is returned when an entity is not found in the storage.
+	ErrEntityNotFound = errors.New("entity not found")
+	// ErrRelationshipNotFound is returned when a relationship is not found in the storage.
 	ErrRelationshipNotFound = errors.New("relationship not found")
 )
 

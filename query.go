@@ -12,16 +12,25 @@ import (
 	"time"
 )
 
+// QueryHandler defines the interface for handling RAG query operations.
+// It provides access to keyword extraction prompt data and the LLM.
 type QueryHandler interface {
+	// KeywordExtractionPromptData returns the data needed to generate prompts for extracting
+	// keywords from user queries and conversation history.
+	// The implementation doesn't need to fill the Query and History fields, as they will be filled
+	// in the Query function.
 	KeywordExtractionPromptData() KeywordExtractionPromptData
 	LLM() LLM
 }
 
+// QueryConversation represents a message in a conversation with its role.
 type QueryConversation struct {
 	Message string
 	Role    string
 }
 
+// QueryResult contains the retrieved context from both global and local searches.
+// It includes entities, relationships, and sources organized by context type.
 type QueryResult struct {
 	GlobalEntities      []EntityContext
 	GlobalRelationships []RelationshipContext
@@ -31,6 +40,7 @@ type QueryResult struct {
 	LocalSources        []SourceContext
 }
 
+// EntityContext represents an entity retrieved from the knowledge graph with its context.
 type EntityContext struct {
 	Name        string
 	Type        string
@@ -39,6 +49,7 @@ type EntityContext struct {
 	CreatedAt   time.Time
 }
 
+// RelationshipContext represents a relationship between entities retrieved from the knowledge graph.
 type RelationshipContext struct {
 	Source      string
 	Target      string
@@ -49,6 +60,7 @@ type RelationshipContext struct {
 	CreatedAt   time.Time
 }
 
+// SourceContext represents a source document chunk with reference count.
 type SourceContext struct {
 	Content  string
 	RefCount int
@@ -65,10 +77,15 @@ type refContext struct {
 }
 
 const (
-	RoleUser      = "user"
+	// RoleUser represents the user role in a conversation.
+	RoleUser = "user"
+	// RoleAssistant represents the assistant role in a conversation.
 	RoleAssistant = "assistant"
 )
 
+// Query performs a RAG search using the provided conversations.
+// It extracts keywords from the user's query, searches for relevant entities and relationships
+// in both local and global contexts, and returns the combined results.
 func Query(
 	conversations []QueryConversation,
 	handler QueryHandler,
@@ -466,10 +483,13 @@ func combineContexts(headers []string, ctx1, ctx2 []refContext) string {
 	return res
 }
 
+// String returns a string representation of the QueryConversation showing its role and content.
 func (q QueryConversation) String() string {
 	return fmt.Sprintf("role: %s, content: %s", q.Role, q.Message)
 }
 
+// String returns a CSV-formatted string representation of the QueryResult with entities,
+// relationships, and sources organized in sections.
 func (q QueryResult) String() string {
 	globalEntities := make([]refContext, len(q.GlobalEntities))
 	for i, entity := range q.GlobalEntities {
@@ -537,11 +557,13 @@ func (q QueryResult) String() string {
 `+threeBacktick(""), entities, relationships, sources)
 }
 
+// String returns a CSV-formatted string representation of the EntityContext.
 func (e EntityContext) String() string {
 	refStr := strconv.Itoa(e.RefCount)
 	return fmt.Sprintf("%q,%q,%q,%q,%q", e.Name, e.Type, e.Description, refStr, e.CreatedAt)
 }
 
+// String returns a CSV-formatted string representation of the RelationshipContext.
 func (r RelationshipContext) String() string {
 	weightStr := strconv.FormatFloat(r.Weight, 'f', 2, 64)
 	refStr := strconv.Itoa(r.RefCount)
@@ -549,6 +571,7 @@ func (r RelationshipContext) String() string {
 		r.Source, r.Target, r.Keywords, r.Description, weightStr, refStr, r.CreatedAt)
 }
 
+// String returns a CSV-formatted string representation of the SourceContext.
 func (s SourceContext) String() string {
 	refStr := strconv.Itoa(s.RefCount)
 	return fmt.Sprintf("%q,%q", s.Content, refStr)

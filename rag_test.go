@@ -116,7 +116,7 @@ func (m *MockStorage) KVSource(id string) (golightrag.Source, error) {
 	return golightrag.Source{}, errors.New("source not found")
 }
 
-func (m *MockStorage) KVUpsertSources(sources []golightrag.Source) error {
+func (m *MockStorage) KVUpsertSources([]golightrag.Source) error {
 	m.kvUpsertSourcesCalled = true
 	return m.kvUpsertSourcesErr
 }
@@ -165,7 +165,7 @@ func (m *MockStorage) GraphUpsertEntity(entity golightrag.GraphEntity) error {
 	return nil
 }
 
-func (m *MockStorage) VectorUpsertEntity(name, content string) error {
+func (m *MockStorage) VectorUpsertEntity(_, _ string) error {
 	m.vectorUpsertEntityCalled = true
 	return m.vectorUpsertEntityErr
 }
@@ -186,7 +186,7 @@ func (m *MockStorage) GraphUpsertRelationship(relationship golightrag.GraphRelat
 	return nil
 }
 
-func (m *MockStorage) VectorUpsertRelationship(source, target, content string) error {
+func (m *MockStorage) VectorUpsertRelationship(_, _, _ string) error {
 	m.vectorUpsertRelationshipCalled = true
 	return m.vectorUpsertRelationshipErr
 }
@@ -205,14 +205,14 @@ func (m *MockStorage) GraphRelatedEntities(name string) ([]golightrag.GraphEntit
 	return []golightrag.GraphEntity{}, nil
 }
 
-func (m *MockStorage) VectorQueryEntity(keywords string) ([]string, error) {
+func (m *MockStorage) VectorQueryEntity(string) ([]string, error) {
 	if m.vectorQueryEntityErr != nil {
 		return nil, m.vectorQueryEntityErr
 	}
 	return m.vectorQueryEntityResults, nil
 }
 
-func (m *MockStorage) VectorQueryRelationship(keywords string) ([][2]string, error) {
+func (m *MockStorage) VectorQueryRelationship(string) ([][2]string, error) {
 	if m.vectorQueryRelationshipErr != nil {
 		return nil, m.vectorQueryRelationshipErr
 	}

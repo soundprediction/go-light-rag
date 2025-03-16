@@ -13,12 +13,21 @@ import (
 	"github.com/MegaGrindStone/go-light-rag/internal"
 )
 
+// DocumentHandler provides an interface for processing documents and interacting with language models.
+// It defines methods for chunking documents, providing entity extraction prompt data,
+// and accessing the underlying language model for operations.
 type DocumentHandler interface {
 	ChunksDocument(content string) ([]Source, error)
+	// EntityExtractionPromptData returns the data needed to generate prompts for extracting
+	// entities and relationships from text content.
+	// The implementation doesn't need to fill the Input field, as it will be filled in the
+	// Insert function.
 	EntityExtractionPromptData() EntityExtractionPromptData
 	LLM() LLM
 }
 
+// Document represents a text document to be processed and stored.
+// It contains an ID for unique identification and the content to be analyzed.
 type Document struct {
 	ID      string
 	Content string
@@ -37,7 +46,10 @@ const (
 	graphFieldSeparator = "<SEP>"
 )
 
-// Insert inserts a document into the storage that can be retreived later with Query.
+// Insert processes a document and stores it in the provided storage.
+// It chunks the document content, extracts entities and relationships using the provided
+// document handler, and stores the results in the appropriate storage.
+// It returns an error if any step in the process fails.
 func Insert(doc Document, handler DocumentHandler, storage Storage, logger *slog.Logger) error {
 	content := cleanContent(doc.Content)
 
@@ -51,6 +63,9 @@ func Insert(doc Document, handler DocumentHandler, storage Storage, logger *slog
 		return fmt.Errorf("failed to chunk string: %w", err)
 	}
 
+	// The chunks returned from the ChunksDocument doesn't have an ID, generate one here
+	// based on the document ID and the order of the chunks. This ID would be used to retrieve
+	// the chunk in the Query function.
 	chunksWithID := make([]Source, len(chunks))
 	for i, chunk := range chunks {
 		id := chunk.genID(doc.ID)
@@ -94,6 +109,7 @@ func extractEntities(
 
 	llm := handler.LLM()
 	for i, source := range orderedSources {
+		// TODO: Call this using concurrency
 		entities, relationships, err := llmExtractEntities(source.Content, extractPromptData, llm, logger)
 		if err != nil {
 			return fmt.Errorf("failed to extract entities with LLM: %w", err)
@@ -146,6 +162,7 @@ func llmExtractEntities(
 	var relationships map[string][]GraphRelationship
 
 	for {
+		// LLM sometimes returns incorrect format, retry up to llm.MaxRetries() times.
 		if retry > llm.MaxRetries() {
 			return nil, nil, fmt.Errorf("failed to extract entities after %d retries", llm.MaxRetries())
 		}
@@ -217,6 +234,9 @@ func llmExtractEntities(
 	}
 }
 
+// parseLLMResult parses the result from LLM and returns a map of entities and relationships
+// based on defined at extractEntitiesPrompt. Although it can be done using responseFormat or
+// structuredOutput, many LLM models is not supporting it yet.
 func parseLLMResult(result string) (map[string][]GraphEntity, map[string][]GraphRelationship, error) {
 	arrBatch := strings.Split(result, completeDelimiter)
 	if len(arrBatch) <= 1 {
