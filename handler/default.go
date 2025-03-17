@@ -30,6 +30,7 @@ type Default struct {
 const (
 	defaultChunkMaxTokenSize     = 1200
 	defaultChunkOverlapTokenSize = 100
+	defaultLanguage              = "English"
 )
 
 // ChunksDocument splits a document's content into overlapping chunks of text.
@@ -53,10 +54,7 @@ func (d Default) ChunksDocument(content string) ([]golightrag.Source, error) {
 
 	results := []golightrag.Source{}
 	for index, start := 0, 0; start < len(tokenIDs); index, start = index+1, start+maxTokenSize-overlapTokenSize {
-		end := start + maxTokenSize
-		if end > len(tokenIDs) {
-			end = len(tokenIDs)
-		}
+		end := min(start+maxTokenSize, len(tokenIDs))
 
 		chunkContent, err := internal.DecodeTokensByTiktoken(tokenIDs[start:end])
 		if err != nil {
@@ -76,11 +74,27 @@ func (d Default) ChunksDocument(content string) ([]golightrag.Source, error) {
 // EntityExtractionPromptData returns the data needed to generate prompts for extracting
 // entities and relationships from text content.
 func (d Default) EntityExtractionPromptData() golightrag.EntityExtractionPromptData {
+	goal := d.EntityExtractionGoal
+	if goal == "" {
+		goal = defaultEntityExtractionGoal
+	}
+	entityTypes := d.EntityTypes
+	if entityTypes == nil {
+		entityTypes = defaultEntityTypes
+	}
+	language := d.Language
+	if language == "" {
+		language = defaultLanguage
+	}
+	examples := d.EntityExtractionExamples
+	if examples == nil {
+		examples = defaultEntityExtractionExamples
+	}
 	return golightrag.EntityExtractionPromptData{
-		Goal:        d.EntityExtractionGoal,
-		EntityTypes: d.EntityTypes,
-		Language:    d.Language,
-		Examples:    d.EntityExtractionExamples,
+		Goal:        goal,
+		EntityTypes: entityTypes,
+		Language:    language,
+		Examples:    examples,
 	}
 }
 
@@ -108,8 +122,16 @@ func (d Default) MaxSummariesTokenLength() int {
 // KeywordExtractionPromptData returns the data needed to generate prompts for extracting
 // keywords from user queries and conversation history.
 func (d Default) KeywordExtractionPromptData() golightrag.KeywordExtractionPromptData {
+	goal := d.KeywordExtractionGoal
+	if goal == "" {
+		goal = defaultKeywordExtractionGoal
+	}
+	examples := d.KeywordExtractionExamples
+	if examples == nil {
+		examples = defaultKeywordExtractionExamples
+	}
 	return golightrag.KeywordExtractionPromptData{
-		Goal:     d.KeywordExtractionGoal,
-		Examples: d.KeywordExtractionExamples,
+		Goal:     goal,
+		Examples: examples,
 	}
 }
