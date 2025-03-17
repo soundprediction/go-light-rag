@@ -50,7 +50,6 @@ func TestInsert(t *testing.T) {
 				EntityTypes: []string{"PERSON", "ORGANIZATION"},
 				Language:    "English",
 			},
-			llm: mockLLM,
 		}
 
 		// Create mock storage
@@ -60,7 +59,7 @@ func TestInsert(t *testing.T) {
 		}
 
 		// Call the function under test
-		err := golightrag.Insert(doc, handler, storage, logger)
+		err := golightrag.Insert(doc, handler, storage, mockLLM, logger)
 		// Assertions
 		if err != nil {
 			t.Errorf("Expected no error, got %v", err)
@@ -180,14 +179,13 @@ func TestInsert(t *testing.T) {
 				EntityTypes: []string{"PERSON", "ORGANIZATION"},
 				Language:    "English",
 			},
-			llm: mockLLM,
 		}
 
 		// Create mock storage
 		storage := &MockStorage{}
 
 		// Call the function under test
-		err := golightrag.Insert(doc, handler, storage, logger)
+		err := golightrag.Insert(doc, handler, storage, mockLLM, logger)
 
 		// Assertions
 		if err == nil {
@@ -210,7 +208,7 @@ func TestInsert(t *testing.T) {
 		storage := &MockStorage{}
 
 		// Call the function under test
-		err := golightrag.Insert(doc, handler, storage, logger)
+		err := golightrag.Insert(doc, handler, storage, nil, logger)
 
 		// Assertions
 		if err == nil {
@@ -245,7 +243,7 @@ func TestInsert(t *testing.T) {
 		}
 
 		// Call the function under test
-		err := golightrag.Insert(doc, handler, storage, logger)
+		err := golightrag.Insert(doc, handler, storage, nil, logger)
 
 		// Assertions
 		if err == nil {
@@ -285,14 +283,13 @@ func TestInsert(t *testing.T) {
 				EntityTypes: []string{"PERSON", "ORGANIZATION"},
 				Language:    "English",
 			},
-			llm: mockLLM,
 		}
 
 		// Create mock storage
 		storage := &MockStorage{}
 
 		// Call the function under test
-		err := golightrag.Insert(doc, handler, storage, logger)
+		err := golightrag.Insert(doc, handler, storage, mockLLM, logger)
 
 		// Assertions
 		if err == nil {

@@ -11,12 +11,10 @@ type MockDocumentHandler struct {
 	chunkErr                   error
 	sources                    []golightrag.Source
 	entityExtractionPromptData golightrag.EntityExtractionPromptData
-	llm                        golightrag.LLM
 }
 
 type MockQueryHandler struct {
 	keywordExtractionPromptData golightrag.KeywordExtractionPromptData
-	llm                         golightrag.LLM
 }
 
 type MockLLM struct {
@@ -73,16 +71,8 @@ func (m *MockDocumentHandler) EntityExtractionPromptData() golightrag.EntityExtr
 	return m.entityExtractionPromptData
 }
 
-func (m *MockDocumentHandler) LLM() golightrag.LLM {
-	return m.llm
-}
-
 func (m *MockQueryHandler) KeywordExtractionPromptData() golightrag.KeywordExtractionPromptData {
 	return m.keywordExtractionPromptData
-}
-
-func (m *MockQueryHandler) LLM() golightrag.LLM {
-	return m.llm
 }
 
 func (m *MockLLM) Chat(messages []string) (string, error) {

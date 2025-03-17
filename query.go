@@ -20,7 +20,6 @@ type QueryHandler interface {
 	// The implementation doesn't need to fill the Query and History fields, as they will be filled
 	// in the Query function.
 	KeywordExtractionPromptData() KeywordExtractionPromptData
-	LLM() LLM
 }
 
 // QueryConversation represents a message in a conversation with its role.
@@ -90,6 +89,7 @@ func Query(
 	conversations []QueryConversation,
 	handler QueryHandler,
 	storage Storage,
+	llm LLM,
 	logger *slog.Logger,
 ) (QueryResult, error) {
 	logger = logger.With(
@@ -118,8 +118,6 @@ func Query(
 	}
 
 	logger.Debug("Use LLM to extract keywords from query", "keywordPrompt", keywordPrompt)
-
-	llm := handler.LLM()
 
 	keywordRes, err := llm.Chat([]string{keywordPrompt})
 	if err != nil {

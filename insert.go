@@ -23,7 +23,6 @@ type DocumentHandler interface {
 	// The implementation doesn't need to fill the Input field, as it will be filled in the
 	// Insert function.
 	EntityExtractionPromptData() EntityExtractionPromptData
-	LLM() LLM
 }
 
 // Document represents a text document to be processed and stored.
@@ -50,7 +49,7 @@ const (
 // It chunks the document content, extracts entities and relationships using the provided
 // document handler, and stores the results in the appropriate storage.
 // It returns an error if any step in the process fails.
-func Insert(doc Document, handler DocumentHandler, storage Storage, logger *slog.Logger) error {
+func Insert(doc Document, handler DocumentHandler, storage Storage, llm LLM, logger *slog.Logger) error {
 	content := cleanContent(doc.Content)
 
 	logger = logger.With(
@@ -83,7 +82,7 @@ func Insert(doc Document, handler DocumentHandler, storage Storage, logger *slog
 		return fmt.Errorf("failed to upsert sources kv: %w", err)
 	}
 
-	if err := extractEntities(doc.ID, chunks, handler, storage, logger); err != nil {
+	if err := extractEntities(doc.ID, chunks, llm, handler.EntityExtractionPromptData(), storage, logger); err != nil {
 		return fmt.Errorf("failed to extract entities: %w", err)
 	}
 
@@ -93,7 +92,8 @@ func Insert(doc Document, handler DocumentHandler, storage Storage, logger *slog
 func extractEntities(
 	docID string,
 	sources []Source,
-	handler DocumentHandler,
+	llm LLM,
+	extractPromptData EntityExtractionPromptData,
 	storage Storage,
 	logger *slog.Logger,
 ) error {
@@ -103,11 +103,8 @@ func extractEntities(
 		return orderedSources[i].OrderIndex < orderedSources[j].OrderIndex
 	})
 
-	extractPromptData := handler.EntityExtractionPromptData()
-
 	logger.Info("Extracting entities", "count", len(orderedSources))
 
-	llm := handler.LLM()
 	for i, source := range orderedSources {
 		// TODO: Call this using concurrency
 		entities, relationships, err := llmExtractEntities(source.Content, extractPromptData, llm, logger)

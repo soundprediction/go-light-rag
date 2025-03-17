@@ -47,7 +47,6 @@ func TestQuery(t *testing.T) {
 			keywordExtractionPromptData: golightrag.KeywordExtractionPromptData{
 				Goal: "Extract keywords",
 			},
-			llm: mockLLM,
 		}
 
 		// Create mock storage with predefined data
@@ -111,7 +110,7 @@ func TestQuery(t *testing.T) {
 		}
 
 		// Call the function under test
-		result, err := golightrag.Query(conversations, handler, storage, logger)
+		result, err := golightrag.Query(conversations, handler, storage, mockLLM, logger)
 		// Assertions
 		if err != nil {
 			t.Errorf("Expected no error, got %v", err)
@@ -146,7 +145,7 @@ func TestQuery(t *testing.T) {
 		storage := &MockStorage{}
 
 		// Call the function under test
-		_, err := golightrag.Query(conversations, handler, storage, logger)
+		_, err := golightrag.Query(conversations, handler, storage, nil, logger)
 
 		// Assertions
 		if err == nil {
@@ -176,14 +175,13 @@ func TestQuery(t *testing.T) {
 			keywordExtractionPromptData: golightrag.KeywordExtractionPromptData{
 				Goal: "Extract keywords",
 			},
-			llm: mockLLM,
 		}
 
 		// Create mock storage
 		storage := &MockStorage{}
 
 		// Call the function under test
-		_, err := golightrag.Query(conversations, handler, storage, logger)
+		_, err := golightrag.Query(conversations, handler, storage, mockLLM, logger)
 
 		// Assertions
 		if err == nil {
@@ -213,14 +211,13 @@ func TestQuery(t *testing.T) {
 			keywordExtractionPromptData: golightrag.KeywordExtractionPromptData{
 				Goal: "Extract keywords",
 			},
-			llm: mockLLM,
 		}
 
 		// Create mock storage
 		storage := &MockStorage{}
 
 		// Call the function under test
-		_, err := golightrag.Query(conversations, handler, storage, logger)
+		_, err := golightrag.Query(conversations, handler, storage, mockLLM, logger)
 
 		// Assertions
 		if err == nil {
@@ -256,7 +253,6 @@ func TestQuery(t *testing.T) {
 			keywordExtractionPromptData: golightrag.KeywordExtractionPromptData{
 				Goal: "Extract keywords",
 			},
-			llm: mockLLM,
 		}
 
 		// Create mock storage with vector query error
@@ -265,7 +261,7 @@ func TestQuery(t *testing.T) {
 		}
 
 		// Call the function under test
-		_, err := golightrag.Query(conversations, handler, storage, logger)
+		_, err := golightrag.Query(conversations, handler, storage, mockLLM, logger)
 
 		// Assertions
 		if err == nil {
@@ -301,7 +297,6 @@ func TestQuery(t *testing.T) {
 			keywordExtractionPromptData: golightrag.KeywordExtractionPromptData{
 				Goal: "Extract keywords",
 			},
-			llm: mockLLM,
 		}
 
 		// Create mock storage with empty results
@@ -311,7 +306,7 @@ func TestQuery(t *testing.T) {
 		}
 
 		// Call the function under test
-		result, err := golightrag.Query(conversations, handler, storage, logger)
+		result, err := golightrag.Query(conversations, handler, storage, mockLLM, logger)
 		// Assertions
 		if err != nil {
 			t.Errorf("Expected no error, got %v", err)
