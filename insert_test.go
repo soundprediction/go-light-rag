@@ -30,10 +30,7 @@ func TestInsert(t *testing.T) {
 ("entity"<|>"ENTITY2"<|>"ORGANIZATION"<|>"This is a description of Entity2")##
 ("relationship"<|>"ENTITY1"<|>"ENTITY2"<|>"Entity1 is related to Entity2"<|>"RELATED_TO"<|>"1.0")##
 <|COMPLETE|>`,
-			maxRetries:  3,
-			gleanCount:  2,
-			maxTokenLen: 1000,
-			chatCalls:   make([][]string, 0),
+			chatCalls: make([][]string, 0),
 		}
 
 		// Create mock handler
@@ -50,6 +47,9 @@ func TestInsert(t *testing.T) {
 				EntityTypes: []string{"PERSON", "ORGANIZATION"},
 				Language:    "English",
 			},
+			maxRetries:  3,
+			gleanCount:  2,
+			maxTokenLen: 1000,
 		}
 
 		// Create mock storage
@@ -160,9 +160,6 @@ func TestInsert(t *testing.T) {
 		// Create mock LLM that returns invalid format
 		mockLLM := &MockLLM{
 			chatResponse: `This is not a valid format`,
-			maxRetries:   1,
-			gleanCount:   1,
-			maxTokenLen:  1000,
 		}
 
 		// Create mock handler
@@ -179,6 +176,9 @@ func TestInsert(t *testing.T) {
 				EntityTypes: []string{"PERSON", "ORGANIZATION"},
 				Language:    "English",
 			},
+			maxRetries:  1,
+			gleanCount:  1,
+			maxTokenLen: 1000,
 		}
 
 		// Create mock storage
@@ -263,10 +263,7 @@ func TestInsert(t *testing.T) {
 
 		// Create mock LLM with error
 		mockLLM := &MockLLM{
-			chatErr:     errors.New("LLM chat error"),
-			maxRetries:  0, // Force immediate failure
-			gleanCount:  2,
-			maxTokenLen: 1000,
+			chatErr: errors.New("LLM chat error"),
 		}
 
 		// Create mock handler
@@ -283,6 +280,9 @@ func TestInsert(t *testing.T) {
 				EntityTypes: []string{"PERSON", "ORGANIZATION"},
 				Language:    "English",
 			},
+			maxRetries:  0, // Force immediate failure
+			gleanCount:  2,
+			maxTokenLen: 1000,
 		}
 
 		// Create mock storage

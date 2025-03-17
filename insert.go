@@ -21,6 +21,12 @@ type DocumentHandler interface {
 	// The implementation doesn't need to fill the Input field, as it will be filled in the
 	// Insert function.
 	EntityExtractionPromptData() EntityExtractionPromptData
+	// MaxRetries determines the maximum number of retries allowed for the Chat function.
+	// This is especially used when extracting entities and relationships from text content,
+	// due to the incorrect format that sometimes LLM returns.
+	MaxRetries() int
+	GleanCount() int
+	MaxSummariesTokenLength() int
 }
 
 // Document represents a text document to be processed and stored.
@@ -80,7 +86,9 @@ func Insert(doc Document, handler DocumentHandler, storage Storage, llm LLM, log
 		return fmt.Errorf("failed to upsert sources kv: %w", err)
 	}
 
-	if err := extractEntities(doc.ID, chunks, llm, handler.EntityExtractionPromptData(), storage, logger); err != nil {
+	if err := extractEntities(doc.ID, chunks, llm,
+		handler.EntityExtractionPromptData(), handler.MaxRetries(), handler.GleanCount(),
+		handler.MaxSummariesTokenLength(), storage, logger); err != nil {
 		return fmt.Errorf("failed to extract entities: %w", err)
 	}
 
@@ -92,6 +100,7 @@ func extractEntities(
 	sources []Source,
 	llm LLM,
 	extractPromptData EntityExtractionPromptData,
+	llmMaxRetries, llmMaxGleanCount, summariesMaxToken int,
 	storage Storage,
 	logger *slog.Logger,
 ) error {
@@ -105,7 +114,8 @@ func extractEntities(
 
 	for i, source := range orderedSources {
 		// TODO: Call this using concurrency
-		entities, relationships, err := llmExtractEntities(source.Content, extractPromptData, llm, logger)
+		entities, relationships, err := llmExtractEntities(source.Content,
+			extractPromptData, llmMaxRetries, llmMaxGleanCount, llm, logger)
 		if err != nil {
 			return fmt.Errorf("failed to extract entities with LLM: %w", err)
 		}
@@ -114,14 +124,14 @@ func extractEntities(
 
 		for name, unmergedEntities := range entities {
 			if err := mergeGraphEntities(name, source.genID(docID), extractPromptData.Language,
-				unmergedEntities, storage, llm, logger); err != nil {
+				unmergedEntities, summariesMaxToken, storage, llm, logger); err != nil {
 				return fmt.Errorf("failed to process graph entity: %w", err)
 			}
 		}
 
 		for key, unmergedRelationships := range relationships {
 			if err := mergeGraphRelationships(key, source.genID(docID), extractPromptData.Language,
-				unmergedRelationships, storage, llm, logger); err != nil {
+				unmergedRelationships, summariesMaxToken, storage, llm, logger); err != nil {
 				return fmt.Errorf("failed to process graph relationship: %w", err)
 			}
 		}
@@ -135,6 +145,7 @@ func extractEntities(
 func llmExtractEntities(
 	content string,
 	data EntityExtractionPromptData,
+	maxRetries, maxGleanCount int,
 	llm LLM,
 	logger *slog.Logger,
 ) (map[string][]GraphEntity, map[string][]GraphRelationship, error) {
@@ -157,9 +168,9 @@ func llmExtractEntities(
 	var relationships map[string][]GraphRelationship
 
 	for {
-		// LLM sometimes returns incorrect format, retry up to llm.MaxRetries() times.
-		if retry > llm.MaxRetries() {
-			return nil, nil, fmt.Errorf("failed to extract entities after %d retries", llm.MaxRetries())
+		// LLM sometimes returns incorrect format, retry up to maxRetries() times.
+		if retry > maxRetries {
+			return nil, nil, fmt.Errorf("failed to extract entities after %d retries", maxRetries)
 		}
 
 		logger.Debug("Use LLM to extract entities from source", "extractPrompt", extractPrompt)
@@ -192,7 +203,7 @@ func llmExtractEntities(
 			sourceResult += gleanResult
 
 			gleanCount++
-			if gleanCount > llm.GleanCount() {
+			if gleanCount > maxGleanCount {
 				break
 			}
 
@@ -340,6 +351,7 @@ func normalizeLLMResultField(s string) string {
 func mergeGraphEntities(
 	name, sourceID, language string,
 	entities []GraphEntity,
+	summariesMaxToken int,
 	storage Storage,
 	llm LLM,
 	logger *slog.Logger,
@@ -371,7 +383,7 @@ func mergeGraphEntities(
 
 	entityType := mostFrequentItem(existingTypes)
 	sourceIDs := strings.Join(existingSourceIDs, graphFieldSeparator)
-	description, err := descriptionsSummary(name, language, existingDescriptions, llm)
+	description, err := descriptionsSummary(name, language, summariesMaxToken, existingDescriptions, llm)
 	if err != nil {
 		return fmt.Errorf("failed to summarize descriptions: %w", err)
 	}
@@ -400,6 +412,7 @@ func mergeGraphEntities(
 func mergeGraphRelationships(
 	key, sourceID, language string,
 	relationships []GraphRelationship,
+	summariesMaxToken int,
 	storage Storage,
 	llm LLM,
 	logger *slog.Logger,
@@ -438,7 +451,7 @@ func mergeGraphRelationships(
 	}
 	existingSourceIDs = appendIfUnique(existingSourceIDs, sourceID)
 
-	description, err := descriptionsSummary(key, language, existingDescriptions, llm)
+	description, err := descriptionsSummary(key, language, summariesMaxToken, existingDescriptions, llm)
 	if err != nil {
 		return fmt.Errorf("failed to summarize descriptions: %w", err)
 	}
@@ -502,13 +515,13 @@ func mergeGraphRelationships(
 	return nil
 }
 
-func descriptionsSummary(name, language string, descriptions []string, llm LLM) (string, error) {
+func descriptionsSummary(name, language string, maxToken int, descriptions []string, llm LLM) (string, error) {
 	joinedDescriptions := strings.Join(descriptions, graphFieldSeparator)
 	tokens, err := internal.EncodeStringByTiktoken(joinedDescriptions)
 	if err != nil {
 		return "", fmt.Errorf("failed to encode string: %w", err)
 	}
-	if len(tokens) < llm.MaxSummariesTokenLength() {
+	if len(tokens) < maxToken {
 		return joinedDescriptions, nil
 	}
 	descString := strings.Join(descriptions, ", ")

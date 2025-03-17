@@ -36,9 +36,6 @@ func TestQuery(t *testing.T) {
 
 		mockLLM := &MockLLM{
 			chatResponse: string(keywordExtractionJSON),
-			maxRetries:   3,
-			gleanCount:   2,
-			maxTokenLen:  1000,
 			chatCalls:    make([][]string, 0),
 		}
 
@@ -164,10 +161,7 @@ func TestQuery(t *testing.T) {
 
 		// Create mock LLM with error
 		mockLLM := &MockLLM{
-			chatErr:     errors.New("LLM chat error"),
-			maxRetries:  3,
-			gleanCount:  2,
-			maxTokenLen: 1000,
+			chatErr: errors.New("LLM chat error"),
 		}
 
 		// Create mock handler
@@ -201,9 +195,6 @@ func TestQuery(t *testing.T) {
 		// Create mock LLM with invalid JSON
 		mockLLM := &MockLLM{
 			chatResponse: "this is not valid JSON",
-			maxRetries:   3,
-			gleanCount:   2,
-			maxTokenLen:  1000,
 		}
 
 		// Create mock handler
@@ -243,9 +234,6 @@ func TestQuery(t *testing.T) {
 
 		mockLLM := &MockLLM{
 			chatResponse: string(keywordExtractionJSON),
-			maxRetries:   3,
-			gleanCount:   2,
-			maxTokenLen:  1000,
 		}
 
 		// Create mock handler
@@ -287,9 +275,6 @@ func TestQuery(t *testing.T) {
 
 		mockLLM := &MockLLM{
 			chatResponse: string(keywordExtractionJSON),
-			maxRetries:   3,
-			gleanCount:   2,
-			maxTokenLen:  1000,
 		}
 
 		// Create mock handler

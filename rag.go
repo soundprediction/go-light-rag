@@ -12,13 +12,10 @@ import (
 // It provides methods for chat interaction, handling retries,
 // extracting information, and managing token limits.
 type LLM interface {
+	// Chat sends messages to the LLM and returns the response.
+	// A message with an even index is guaranteed to be sent by the user, while the odd index is
+	// sent by the assistant.
 	Chat(messages []string) (string, error)
-	// MaxRetries determines the maximum number of retries allowed for the Chat function.
-	// This is especially used when extracting entities and relationships from text content,
-	// due to the incorrect format that sometimes LLM returns.
-	MaxRetries() int
-	GleanCount() int
-	MaxSummariesTokenLength() int
 }
 
 // GraphStorage defines the interface for graph database operations.

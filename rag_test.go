@@ -11,6 +11,10 @@ type MockDocumentHandler struct {
 	chunkErr                   error
 	sources                    []golightrag.Source
 	entityExtractionPromptData golightrag.EntityExtractionPromptData
+
+	maxRetries  int
+	gleanCount  int
+	maxTokenLen int
 }
 
 type MockQueryHandler struct {
@@ -20,9 +24,6 @@ type MockQueryHandler struct {
 type MockLLM struct {
 	chatResponse string
 	chatErr      error
-	maxRetries   int
-	gleanCount   int
-	maxTokenLen  int
 
 	// For tracking interactions
 	chatCalls [][]string
@@ -71,6 +72,18 @@ func (m *MockDocumentHandler) EntityExtractionPromptData() golightrag.EntityExtr
 	return m.entityExtractionPromptData
 }
 
+func (m *MockDocumentHandler) MaxRetries() int {
+	return m.maxRetries
+}
+
+func (m *MockDocumentHandler) GleanCount() int {
+	return m.gleanCount
+}
+
+func (m *MockDocumentHandler) MaxSummariesTokenLength() int {
+	return m.maxTokenLen
+}
+
 func (m *MockQueryHandler) KeywordExtractionPromptData() golightrag.KeywordExtractionPromptData {
 	return m.keywordExtractionPromptData
 }
@@ -85,18 +98,6 @@ func (m *MockLLM) Chat(messages []string) (string, error) {
 		return "", m.chatErr
 	}
 	return m.chatResponse, nil
-}
-
-func (m *MockLLM) MaxRetries() int {
-	return m.maxRetries
-}
-
-func (m *MockLLM) GleanCount() int {
-	return m.gleanCount
-}
-
-func (m *MockLLM) MaxSummariesTokenLength() int {
-	return m.maxTokenLen
 }
 
 func (m *MockStorage) KVSource(id string) (golightrag.Source, error) {
