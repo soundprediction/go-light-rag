@@ -13,8 +13,8 @@ import (
 // It handles operations for storing and retrieving vector-based entities and relationships
 // with semantic search capabilities.
 type Chromem struct {
-	entitiesColl      *chromem.Collection
-	relationshipsColl *chromem.Collection
+	EntitiesColl      *chromem.Collection
+	RelationshipsColl *chromem.Collection
 
 	topK int
 }
@@ -39,8 +39,8 @@ func NewChromem(dbPath string, topK int, embeddingFunc chromem.EmbeddingFunc) (C
 	}
 
 	return Chromem{
-		entitiesColl:      entitiesColl,
-		relationshipsColl: relationshipsColl,
+		EntitiesColl:      entitiesColl,
+		RelationshipsColl: relationshipsColl,
 		topK:              topK,
 	}, nil
 }
@@ -51,7 +51,7 @@ func (c Chromem) VectorQueryEntity(keywords string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	vecRes, err := c.entitiesColl.Query(ctx, keywords, c.topK, nil, nil)
+	vecRes, err := c.EntitiesColl.Query(ctx, keywords, c.topK, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query entities: %w", err)
 	}
@@ -74,7 +74,7 @@ func (c Chromem) VectorQueryRelationship(keywords string) ([][2]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	vecRes, err := c.relationshipsColl.Query(ctx, keywords, c.topK, nil, nil)
+	vecRes, err := c.RelationshipsColl.Query(ctx, keywords, c.topK, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query relationships: %w", err)
 	}
@@ -109,7 +109,7 @@ func (c Chromem) VectorUpsertEntity(name, content string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	return c.entitiesColl.AddDocument(ctx, doc)
+	return c.EntitiesColl.AddDocument(ctx, doc)
 }
 
 // VectorUpsertRelationship creates or updates a relationship with vector embedding based on its content.
@@ -127,5 +127,5 @@ func (c Chromem) VectorUpsertRelationship(source, target, content string) error 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	return c.relationshipsColl.AddDocument(ctx, doc)
+	return c.RelationshipsColl.AddDocument(ctx, doc)
 }

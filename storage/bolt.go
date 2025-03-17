@@ -10,7 +10,7 @@ import (
 // Bolt provides a BoltDB key-value storage implementation of storage interfaces.
 // It handles database operations for storing and retrieving source documents.
 type Bolt struct {
-	db *bolt.DB
+	DB *bolt.DB
 }
 
 // NewBolt creates a new BoltDB client connection with the provided file path.
@@ -29,7 +29,7 @@ func NewBolt(path string) (Bolt, error) {
 		return Bolt{}, fmt.Errorf("failed to create sources bucket: %w", err)
 	}
 
-	return Bolt{db: db}, nil
+	return Bolt{DB: db}, nil
 }
 
 // KVSource retrieves a source document by ID from the BoltDB database.
@@ -37,7 +37,7 @@ func NewBolt(path string) (Bolt, error) {
 func (b Bolt) KVSource(id string) (golightrag.Source, error) {
 	var result golightrag.Source
 
-	err := b.db.View(func(tx *bolt.Tx) error {
+	err := b.DB.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("sources"))
 
 		content := b.Get([]byte(id))
@@ -56,7 +56,7 @@ func (b Bolt) KVSource(id string) (golightrag.Source, error) {
 // KVUpsertSources creates or updates multiple source documents in the BoltDB database.
 // It returns an error if any database operation fails during the process.
 func (b Bolt) KVUpsertSources(sources []golightrag.Source) error {
-	return b.db.Update(func(tx *bolt.Tx) error {
+	return b.DB.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("sources"))
 		if b == nil {
 			return fmt.Errorf("bucket not found")

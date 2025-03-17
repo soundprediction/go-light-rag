@@ -15,7 +15,7 @@ import (
 // It handles database connections and operations for storing and retrieving graph entities
 // and relationships.
 type Neo4J struct {
-	client neo4j.DriverWithContext
+	Client neo4j.DriverWithContext
 }
 
 // NewNeo4J creates a new Neo4j client connection with the provided connection parameters.
@@ -28,7 +28,7 @@ func NewNeo4J(target, user, password string) (Neo4J, error) {
 	if err != nil {
 		return Neo4J{}, fmt.Errorf("failed to create neo4j driver: %w", err)
 	}
-	return Neo4J{client: driver}, nil
+	return Neo4J{Client: driver}, nil
 }
 
 func graphEntityFromNode(node dbtype.Node) golightrag.GraphEntity {
@@ -347,14 +347,14 @@ RETURN n, r, connected`
 // Close terminates the connection to the Neo4j database.
 // It returns any error encountered during the closing operation.
 func (n Neo4J) Close(ctx context.Context) error {
-	return n.client.Close(ctx)
+	return n.Client.Close(ctx)
 }
 
 func (n Neo4J) session(sessFunc func(context.Context, neo4j.SessionWithContext) (any, error)) (any, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
-	sess := n.client.NewSession(ctx, neo4j.SessionConfig{})
+	sess := n.Client.NewSession(ctx, neo4j.SessionConfig{})
 	defer func() {
 		closeCtx, closeCancel := context.WithTimeout(context.Background(), time.Second*30)
 		defer closeCancel()
