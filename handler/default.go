@@ -23,6 +23,8 @@ type Default struct {
 
 	KeywordExtractionGoal     string
 	KeywordExtractionExamples []golightrag.KeywordExtractionPromptExample
+
+	Config DocumentConfig
 }
 
 const (
@@ -80,6 +82,27 @@ func (d Default) EntityExtractionPromptData() golightrag.EntityExtractionPromptD
 		Language:    d.Language,
 		Examples:    d.EntityExtractionExamples,
 	}
+}
+
+// MaxRetries returns the maximum number of retry attempts for RAG operations
+// as configured in the DocumentConfig.
+func (d Default) MaxRetries() int {
+	return d.Config.MaxRetries
+}
+
+// GleanCount returns the number of sources to extract during RAG operations
+// as configured in the DocumentConfig.
+func (d Default) GleanCount() int {
+	return d.Config.GleanCount
+}
+
+// MaxSummariesTokenLength returns the maximum token length for summaries.
+// If not explicitly configured, it returns the default value.
+func (d Default) MaxSummariesTokenLength() int {
+	if d.Config.MaxSummariesTokenLength == 0 {
+		return defaultMaxSummariesTokenLength
+	}
+	return d.Config.MaxSummariesTokenLength
 }
 
 // KeywordExtractionPromptData returns the data needed to generate prompts for extracting
