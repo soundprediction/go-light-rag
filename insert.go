@@ -14,8 +14,6 @@ import (
 )
 
 // DocumentHandler provides an interface for processing documents and interacting with language models.
-// It defines methods for chunking documents, providing entity extraction prompt data,
-// and accessing the underlying language model for operations.
 type DocumentHandler interface {
 	ChunksDocument(content string) ([]Source, error)
 	// EntityExtractionPromptData returns the data needed to generate prompts for extracting

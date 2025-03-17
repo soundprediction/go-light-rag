@@ -13,7 +13,6 @@ import (
 )
 
 // QueryHandler defines the interface for handling RAG query operations.
-// It provides access to keyword extraction prompt data and the LLM.
 type QueryHandler interface {
 	// KeywordExtractionPromptData returns the data needed to generate prompts for extracting
 	// keywords from user queries and conversation history.
