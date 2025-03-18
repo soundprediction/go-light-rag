@@ -3,6 +3,7 @@ package golightrag
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"text/template"
 	"time"
@@ -121,10 +122,8 @@ func promptTemplate(name, templ string, data any) (string, error) {
 }
 
 func appendIfUnique(slice []string, item string) []string {
-	for _, ele := range slice {
-		if ele == item {
-			return slice
-		}
+	if slices.Contains(slice, item) {
+		return slice
 	}
 	return append(slice, item)
 }

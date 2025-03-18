@@ -12,9 +12,10 @@ type MockDocumentHandler struct {
 	sources                    []golightrag.Source
 	entityExtractionPromptData golightrag.EntityExtractionPromptData
 
-	maxRetries  int
-	gleanCount  int
-	maxTokenLen int
+	maxRetries       int
+	concurrencyCount int
+	gleanCount       int
+	maxTokenLen      int
 }
 
 type MockQueryHandler struct {
@@ -74,6 +75,10 @@ func (m *MockDocumentHandler) EntityExtractionPromptData() golightrag.EntityExtr
 
 func (m *MockDocumentHandler) MaxRetries() int {
 	return m.maxRetries
+}
+
+func (m *MockDocumentHandler) ConcurrencyCount() int {
+	return m.concurrencyCount
 }
 
 func (m *MockDocumentHandler) GleanCount() int {

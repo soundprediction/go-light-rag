@@ -5,6 +5,7 @@ go 1.24.0
 toolchain go1.24.1
 
 require (
+	github.com/cespare/xxhash v1.1.0
 	github.com/google/uuid v1.6.0
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.0
 	github.com/ollama/ollama v0.6.1
@@ -12,6 +13,8 @@ require (
 	github.com/sashabaranov/go-openai v1.38.0
 	github.com/tiktoken-go/tokenizer v0.6.0
 	go.etcd.io/bbolt v1.4.0
+	golang.org/x/sync v0.11.0
+	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (

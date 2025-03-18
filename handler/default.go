@@ -27,10 +27,21 @@ type Default struct {
 	Config DocumentConfig
 }
 
+// DocumentConfig contains configuration parameters for document processing
+// during RAG operations, including retry behavior and token length limits.
+type DocumentConfig struct {
+	MaxRetries              int
+	ConcurrencyCount        int
+	GleanCount              int
+	MaxSummariesTokenLength int
+}
+
 const (
-	defaultChunkMaxTokenSize     = 1200
-	defaultChunkOverlapTokenSize = 100
-	defaultLanguage              = "English"
+	defaultChunkMaxTokenSize       = 1200
+	defaultChunkOverlapTokenSize   = 100
+	defaultLanguage                = "English"
+	defaultMaxSummariesTokenLength = 1200
+	defaultConcurrencyCount        = 1
 )
 
 // ChunksDocument splits a document's content into overlapping chunks of text.
@@ -102,6 +113,12 @@ func (d Default) EntityExtractionPromptData() golightrag.EntityExtractionPromptD
 // as configured in the DocumentConfig.
 func (d Default) MaxRetries() int {
 	return d.Config.MaxRetries
+}
+
+// ConcurrencyCount returns the number of concurrent requests to the LLM
+// as configured in the DocumentConfig.
+func (d Default) ConcurrencyCount() int {
+	return d.Config.ConcurrencyCount
 }
 
 // GleanCount returns the number of sources to extract during RAG operations

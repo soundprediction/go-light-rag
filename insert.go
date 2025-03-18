@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/MegaGrindStone/go-light-rag/internal"
+	"golang.org/x/sync/errgroup"
 )
 
 // DocumentHandler provides an interface for processing documents and interacting with language models.
@@ -25,6 +27,8 @@ type DocumentHandler interface {
 	// This is especially used when extracting entities and relationships from text content,
 	// due to the incorrect format that sometimes LLM returns.
 	MaxRetries() int
+	// ConcurrencyCount determines the number of concurrent requests to the LLM.
+	ConcurrencyCount() int
 	GleanCount() int
 	MaxSummariesTokenLength() int
 }
@@ -86,8 +90,13 @@ func Insert(doc Document, handler DocumentHandler, storage Storage, llm LLM, log
 		return fmt.Errorf("failed to upsert sources kv: %w", err)
 	}
 
+	llmConcurrencyCount := handler.ConcurrencyCount()
+	if llmConcurrencyCount == 0 {
+		llmConcurrencyCount = 1
+	}
+
 	if err := extractEntities(doc.ID, chunks, llm,
-		handler.EntityExtractionPromptData(), handler.MaxRetries(), handler.GleanCount(),
+		handler.EntityExtractionPromptData(), handler.MaxRetries(), llmConcurrencyCount, handler.GleanCount(),
 		handler.MaxSummariesTokenLength(), storage, logger); err != nil {
 		return fmt.Errorf("failed to extract entities: %w", err)
 	}
@@ -100,7 +109,7 @@ func extractEntities(
 	sources []Source,
 	llm LLM,
 	extractPromptData EntityExtractionPromptData,
-	llmMaxRetries, llmMaxGleanCount, summariesMaxToken int,
+	llmMaxRetries, llmConcurrencyCount, llmMaxGleanCount, summariesMaxToken int,
 	storage Storage,
 	logger *slog.Logger,
 ) error {
@@ -112,31 +121,44 @@ func extractEntities(
 
 	logger.Info("Extracting entities", "count", len(orderedSources))
 
+	eg := new(errgroup.Group)
+	sem := make(chan struct{}, llmConcurrencyCount)
+
 	for i, source := range orderedSources {
-		// TODO: Call this using concurrency
-		entities, relationships, err := llmExtractEntities(source.Content,
-			extractPromptData, llmMaxRetries, llmMaxGleanCount, llm, logger)
-		if err != nil {
-			return fmt.Errorf("failed to extract entities with LLM: %w", err)
-		}
+		eg.Go(func() error {
+			sem <- struct{}{}
+			defer func() { <-sem }()
 
-		logger.Info("Done call LLM", "entities", len(entities), "relationships", len(relationships))
-
-		for name, unmergedEntities := range entities {
-			if err := mergeGraphEntities(name, source.genID(docID), extractPromptData.Language,
-				unmergedEntities, summariesMaxToken, storage, llm, logger); err != nil {
-				return fmt.Errorf("failed to process graph entity: %w", err)
+			entities, relationships, err := llmExtractEntities(source.Content,
+				extractPromptData, llmMaxRetries, llmMaxGleanCount, llm, logger)
+			if err != nil {
+				return fmt.Errorf("failed to extract entities with LLM: %w", err)
 			}
-		}
 
-		for key, unmergedRelationships := range relationships {
-			if err := mergeGraphRelationships(key, source.genID(docID), extractPromptData.Language,
-				unmergedRelationships, summariesMaxToken, storage, llm, logger); err != nil {
-				return fmt.Errorf("failed to process graph relationship: %w", err)
+			logger.Info("Done call LLM", "entities", len(entities), "relationships", len(relationships))
+
+			for name, unmergedEntities := range entities {
+				if err := mergeGraphEntities(name, source.genID(docID), extractPromptData.Language,
+					unmergedEntities, summariesMaxToken, storage, llm, logger); err != nil {
+					return fmt.Errorf("failed to process graph entity: %w", err)
+				}
 			}
-		}
 
-		logger.Info("Processed source", "index", i+1)
+			for key, unmergedRelationships := range relationships {
+				if err := mergeGraphRelationships(key, source.genID(docID), extractPromptData.Language,
+					unmergedRelationships, summariesMaxToken, storage, llm, logger); err != nil {
+					return fmt.Errorf("failed to process graph relationship: %w", err)
+				}
+			}
+
+			logger.Info("Processed source", "index", i+1)
+
+			return nil
+		})
+	}
+
+	if err := eg.Wait(); err != nil {
+		return err
 	}
 
 	return nil
@@ -228,7 +250,7 @@ func llmExtractEntities(
 			}
 		}
 
-		entities, relationships, err = parseLLMResult(sourceResult)
+		entities, relationships, err = parseLLMResult(sourceResult, data.EntityTypes)
 		if err != nil {
 			nErr := fmt.Errorf("failed to parse llm result: %w", err)
 			retry++
@@ -243,19 +265,29 @@ func llmExtractEntities(
 // parseLLMResult parses the result from LLM and returns a map of entities and relationships
 // based on defined at extractEntitiesPrompt. Although it can be done using responseFormat or
 // structuredOutput, many LLM models is not supporting it yet.
-func parseLLMResult(result string) (map[string][]GraphEntity, map[string][]GraphRelationship, error) {
+//
+//nolint:gocognit
+func parseLLMResult(
+	result string,
+	entityTypes []string) (
+	map[string][]GraphEntity, map[string][]GraphRelationship, error,
+) {
 	arrBatch := strings.Split(result, completeDelimiter)
 	if len(arrBatch) <= 1 {
 		return nil, nil, fmt.Errorf("no complete delimiter found in result: %s", result)
 	}
 
+	expectedEntityTypes := make([]string, 0)
+	expectedEntityTypes = append(expectedEntityTypes, entityTypes...)
+	expectedEntityTypes = append(expectedEntityTypes, "UNKNOWN")
+
 	entities := make(map[string][]GraphEntity, 0)
 	relationships := make(map[string][]GraphRelationship, 0)
 
 	for _, batch := range arrBatch {
-		arrRes := strings.Split(batch, recordDelimiter)
+		arrRes := strings.SplitSeq(batch, recordDelimiter)
 
-		for _, res := range arrRes {
+		for res := range arrRes {
 			res = strings.TrimSpace(res)
 			res = strings.TrimPrefix(res, "(")
 			res = strings.TrimSuffix(res, ")")
@@ -283,6 +315,9 @@ func parseLLMResult(result string) (map[string][]GraphEntity, map[string][]Graph
 				entityType := strings.ToUpper(normalizeLLMResultField(arrFields[2]))
 				if entityType == "" {
 					entityType = "UNKNOWN"
+				}
+				if !slices.Contains(expectedEntityTypes, entityType) {
+					return nil, nil, fmt.Errorf("invalid entity type from result: %s", res)
 				}
 
 				entity := GraphEntity{
