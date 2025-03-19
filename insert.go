@@ -16,6 +16,9 @@ import (
 
 // DocumentHandler provides an interface for processing documents and interacting with language models.
 type DocumentHandler interface {
+	// ChunksDocument splits a document's content into smaller, manageable chunks.
+	// It returns a slice of Source objects representing the document chunks,
+	// without assigning IDs (IDs will be generated in the Insert function).
 	ChunksDocument(content string) ([]Source, error)
 	// EntityExtractionPromptData returns the data needed to generate prompts for extracting
 	// entities and relationships from text content.
@@ -30,7 +33,12 @@ type DocumentHandler interface {
 	ConcurrencyCount() int
 	// BackoffDuration determines the backoff duration between retries.
 	BackoffDuration() time.Duration
+	// GleanCount returns the maximum number of additional extraction attempts
+	// to perform after the initial entity extraction to find entities that might
+	// have been missed.
 	GleanCount() int
+	// MaxSummariesTokenLength returns the maximum token length allowed for entity
+	// and relationship descriptions before they need to be summarized by the LLM.
 	MaxSummariesTokenLength() int
 }
 
@@ -111,6 +119,7 @@ func extractEntities(
 	storage Storage,
 	logger *slog.Logger,
 ) error {
+	// Sort sources by order index to maintain document flow
 	orderedSources := make([]Source, len(sources))
 	copy(orderedSources, sources)
 	sort.Slice(orderedSources, func(i, j int) bool {
@@ -120,13 +129,16 @@ func extractEntities(
 	logger.Info("Extracting entities", "count", len(orderedSources))
 
 	eg := new(errgroup.Group)
+	// Semaphore to limit concurrent LLM calls
 	sem := make(chan struct{}, llmConcurrencyCount)
 
 	for i, source := range orderedSources {
 		eg.Go(func() error {
+			// Acquire semaphore before making LLM call
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
+			// Extract entities and relationships for this source chunk
 			entities, relationships, err := llmExtractEntities(source.Content,
 				extractPromptData, llmMaxRetries, llmMaxGleanCount, backoffDuration, llm, logger)
 			if err != nil {
@@ -135,6 +147,7 @@ func extractEntities(
 
 			logger.Info("Done call LLM", "entities", len(entities), "relationships", len(relationships))
 
+			// Process each entity group by name
 			for name, unmergedEntities := range entities {
 				if err := mergeGraphEntities(name, source.genID(docID), extractPromptData.Language,
 					unmergedEntities, summariesMaxToken, storage, llm, logger); err != nil {
@@ -142,6 +155,7 @@ func extractEntities(
 				}
 			}
 
+			// Process each relationship group by source-target pair
 			for key, unmergedRelationships := range relationships {
 				if err := mergeGraphRelationships(key, source.genID(docID), extractPromptData.Language,
 					unmergedRelationships, summariesMaxToken, storage, llm, logger); err != nil {
@@ -204,6 +218,7 @@ func llmExtractEntities(
 
 		logger.Debug("Use LLM to extract entities from source", "extractPrompt", extractPrompt)
 
+		// Initial extraction conversation
 		histories := []string{extractPrompt}
 
 		sourceResult, err := llm.Chat(histories)
@@ -214,6 +229,7 @@ func llmExtractEntities(
 			continue
 		}
 
+		// Parse initial extraction results
 		var sourceParsed llmResult
 		err = json.Unmarshal([]byte(sourceResult), &sourceParsed)
 		if err != nil {
@@ -227,6 +243,7 @@ func llmExtractEntities(
 
 		histories = append(histories, sourceResult)
 
+		// "Gleaning" process: attempt to extract additional entities that might have been missed
 		gleanCount := 0
 		for {
 			logger.Debug("Use LLM to glean entities from source", "gleanPrompt", gleanPrompt)
@@ -257,6 +274,7 @@ func llmExtractEntities(
 				break
 			}
 
+			// Ask LLM if we should continue gleaning more entities
 			decideMessages := make([]string, 0)
 			decideMessages = append(decideMessages, histories...)
 			decideMessages = append(decideMessages, gleanDecideContinuePrompt)
@@ -273,11 +291,13 @@ func llmExtractEntities(
 
 			logger.Debug("Decide result from LLM", "decideResult", decideResult)
 
+			// Only continue gleaning if the LLM explicitly says "yes"
 			if decideResult != "yes" {
 				break
 			}
 		}
 
+		// Organize entities by name and relationships by source-target pair
 		entities, relationships := dedupeLLMResult(results.Entities, results.Relationships, data.EntityTypes)
 		return entities, relationships, nil
 	}
@@ -288,19 +308,22 @@ func dedupeLLMResult(
 	relationships []GraphRelationship,
 	entityTypes []string,
 ) (map[string][]GraphEntity, map[string][]GraphRelationship) {
+	// Group entities by their names and relationships by their source-target pair
 	ents := make(map[string][]GraphEntity, 0)
 	rels := make(map[string][]GraphRelationship, 0)
 
+	// Convert entity types to uppercase for case-insensitive matching
 	expectedEntityTypes := make([]string, 0)
 	for _, et := range entityTypes {
 		expectedEntityTypes = append(expectedEntityTypes, strings.ToUpper(et))
 	}
 	expectedEntityTypes = append(expectedEntityTypes, "UNKNOWN")
 
+	// Process and group entities by name
 	for _, entity := range entities {
 		entity.Type = strings.ToUpper(entity.Type)
+		// Enforce valid entity types; use "UNKNOWN" if invalid
 		if !slices.Contains(expectedEntityTypes, entity.Type) {
-			// If llm returns invalid entity type, use UNKNOWN.
 			entity.Type = "UNKNOWN"
 		}
 
@@ -311,6 +334,7 @@ func dedupeLLMResult(
 		ents[entity.Name] = append(ents[entity.Name], entity)
 	}
 
+	// Process and group relationships by composite key: sourceEntity-targetEntity
 	for _, relationship := range relationships {
 		relationship.SourceEntity = strings.ToUpper(relationship.SourceEntity)
 		relationship.TargetEntity = strings.ToUpper(relationship.TargetEntity)
@@ -332,6 +356,7 @@ func mergeGraphEntities(
 	llm LLM,
 	logger *slog.Logger,
 ) error {
+	// Collect data from existing entity (if found) to merge with new data
 	existingTypes := make([]string, 0)
 	existingSourceIDs := make([]string, 0)
 	existingDescriptions := make([]string, 0)
@@ -341,7 +366,9 @@ func mergeGraphEntities(
 		if !errors.Is(err, ErrEntityNotFound) {
 			return fmt.Errorf("failed to get entity: %w", err)
 		}
+		// If entity not found, continue with empty existing data
 	} else {
+		// Extract and parse data from existing entity
 		existingTypes = append(existingTypes, existingEntity.Type)
 
 		arrDescriptions := strings.Split(existingEntity.Descriptions, GraphFieldSeparator)
@@ -351,14 +378,18 @@ func mergeGraphEntities(
 		existingSourceIDs = append(existingSourceIDs, arrSourceIDs...)
 	}
 
+	// Merge data from new entities
 	for _, entity := range entities {
 		existingTypes = append(existingTypes, entity.Type)
 		existingDescriptions = appendIfUnique(existingDescriptions, entity.Descriptions)
 	}
 	existingSourceIDs = appendIfUnique(existingSourceIDs, sourceID)
 
+	// Choose the most frequent entity type from all type mentions
 	entityType := mostFrequentItem(existingTypes)
 	sourceIDs := strings.Join(existingSourceIDs, GraphFieldSeparator)
+
+	// Summarize descriptions if they exceed token limit
 	description, err := descriptionsSummary(name, language, summariesMaxToken, existingDescriptions, llm)
 	if err != nil {
 		return fmt.Errorf("failed to summarize descriptions: %w", err)
@@ -374,6 +405,7 @@ func mergeGraphEntities(
 
 	logger.Debug("Upserting graph entity", "entity", ent)
 
+	// Update both graph and vector storage for entity
 	if err := storage.GraphUpsertEntity(ent); err != nil {
 		return fmt.Errorf("failed to upsert graph entity in graph storage: %w", err)
 	}
@@ -393,23 +425,29 @@ func mergeGraphRelationships(
 	llm LLM,
 	logger *slog.Logger,
 ) error {
+	// Track existing relationship properties to merge with new data
 	existingWeight := 0.0
 	existingDescriptions := make([]string, 0)
 	existingKeywords := make([]string, 0)
 	existingSourceIDs := make([]string, 0)
 
+	// Parse composite key format "SOURCE-TARGET" into separate entity names
 	arrKey := strings.Split(key, "-")
 	sourceEntity := arrKey[0]
 	targetEntity := arrKey[1]
 
+	// Retrieve existing relationship data from storage if it exists
 	existingRelationship, err := storage.GraphRelationship(sourceEntity, targetEntity)
 	if err != nil {
 		if !errors.Is(err, ErrRelationshipNotFound) {
 			return fmt.Errorf("failed to get relationship: %w", err)
 		}
+		// If relationship not found, continue with empty existing data
 	} else {
+		// Accumulate existing weight (weights are additive for relationship strength)
 		existingWeight += existingRelationship.Weight
 
+		// Extract and parse data from existing relationship
 		arrDescriptions := strings.Split(existingRelationship.Descriptions, GraphFieldSeparator)
 		existingDescriptions = append(existingDescriptions, arrDescriptions...)
 
@@ -419,6 +457,7 @@ func mergeGraphRelationships(
 		existingSourceIDs = append(existingSourceIDs, arrSourceIDs...)
 	}
 
+	// Merge new relationship data with existing data
 	for _, relationship := range relationships {
 		existingWeight += relationship.Weight
 		existingDescriptions = appendIfUnique(existingDescriptions, relationship.Descriptions)
@@ -428,12 +467,15 @@ func mergeGraphRelationships(
 	}
 	existingSourceIDs = appendIfUnique(existingSourceIDs, sourceID)
 
+	// Summarize all descriptions if they exceed token limit
 	description, err := descriptionsSummary(key, language, summariesMaxToken, existingDescriptions, llm)
 	if err != nil {
 		return fmt.Errorf("failed to summarize descriptions: %w", err)
 	}
 	sourceIDs := strings.Join(existingSourceIDs, GraphFieldSeparator)
 
+	// Create source entity if it doesn't exist
+	// This ensures relationship integrity by avoiding dangling references
 	_, err = storage.GraphEntity(sourceEntity)
 	if err != nil {
 		if !errors.Is(err, ErrEntityNotFound) {
@@ -441,6 +483,7 @@ func mergeGraphRelationships(
 		}
 		logger.Debug("Entity not found, upserting", "entity", sourceEntity)
 
+		// Create a minimal placeholder entity with UNKNOWN type
 		if err := storage.GraphUpsertEntity(GraphEntity{
 			Name:         sourceEntity,
 			Type:         "UNKNOWN",
@@ -452,6 +495,8 @@ func mergeGraphRelationships(
 		}
 	}
 
+	// Create target entity if it doesn't exist
+	// Similar to source entity creation for relationship integrity
 	_, err = storage.GraphEntity(targetEntity)
 	if err != nil {
 		if !errors.Is(err, ErrEntityNotFound) {
@@ -469,6 +514,7 @@ func mergeGraphRelationships(
 		}
 	}
 
+	// Create final relationship with merged data
 	rel := GraphRelationship{
 		SourceEntity: sourceEntity,
 		TargetEntity: targetEntity,
@@ -479,10 +525,13 @@ func mergeGraphRelationships(
 		CreatedAt:    time.Now(),
 	}
 
+	// Update both graph and vector storage for the relationship
 	if err := storage.GraphUpsertRelationship(rel); err != nil {
 		return fmt.Errorf("failed to upsert graph relationship: %w", err)
 	}
 
+	// Create a combined content string for vector storage
+	// This enables semantic search over relationships
 	keywords := strings.Join(rel.Keywords, GraphFieldSeparator)
 	content := keywords + rel.SourceEntity + rel.TargetEntity + rel.Descriptions
 	if err := storage.VectorUpsertRelationship(rel.SourceEntity, rel.TargetEntity, content); err != nil {
@@ -493,17 +542,25 @@ func mergeGraphRelationships(
 }
 
 func descriptionsSummary(name, language string, maxToken int, descriptions []string, llm LLM) (string, error) {
+	// Join all descriptions with separator
 	joinedDescriptions := strings.Join(descriptions, GraphFieldSeparator)
+
+	// Check if the joined descriptions exceed the token limit
 	tokens, err := internal.EncodeStringByTiktoken(joinedDescriptions)
 	if err != nil {
 		return "", fmt.Errorf("failed to encode string: %w", err)
 	}
+
+	// If descriptions are under token limit, no need to summarize
 	if len(tokens) < maxToken {
 		return joinedDescriptions, nil
 	}
+
+	// Format descriptions for LLM summarization
 	descString := strings.Join(descriptions, ", ")
 	descString = "[" + descString + "]"
 
+	// Generate summary prompt and get LLM to create a condensed description
 	summarizePrompt, err := promptTemplate("summarize-descriptions", summarizeDescriptionsPrompt,
 		summarizeDescriptionsPromptData{
 			EntityName:   name,

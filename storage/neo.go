@@ -248,103 +248,304 @@ SET r += $properties
 	return err
 }
 
-// GraphCountEntityRelationships counts the number of relationships connected to a specific entity.
-// It returns the count of relationships and any error encountered during the operation.
-func (n Neo4J) GraphCountEntityRelationships(name string) (int, error) {
+// GraphEntities retrieves multiple graph entities by their names from the Neo4j database.
+// It returns a map of entity names to GraphEntity objects, or an error if the query fails.
+func (n Neo4J) GraphEntities(names []string) (map[string]golightrag.GraphEntity, error) {
+	if len(names) == 0 {
+		return map[string]golightrag.GraphEntity{}, nil
+	}
+
 	res, err := n.session(func(ctx context.Context, sess neo4j.SessionWithContext) (any, error) {
 		return sess.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
 			query := `
-MATCH (n:base {entity_id: $entity_id})
-OPTIONAL MATCH (n)-[r]-()
-RETURN COUNT(r) AS degree`
+MATCH (n:base) 
+WHERE n.entity_id IN $entityIDs 
+RETURN n, n.entity_id as entity_id`
 			queryRes, err := tx.Run(ctx, query, map[string]any{
-				"entity_id": name,
+				"entityIDs": names,
 			})
 			if err != nil {
 				return nil, fmt.Errorf("failed to run query: %w", err)
 			}
 
-			ety, err := queryRes.Single(ctx)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get result: %w", err)
-			}
-			return ety.AsMap(), nil
-		})
-	})
-	if err != nil {
-		return 0, err
-	}
-	resMap, ok := res.(map[string]any)
-	if !ok {
-		return 0, fmt.Errorf("invalid result type: %T", res)
-	}
-	if len(resMap) == 0 {
-		return 0, nil
-	}
-
-	degree, ok := resMap["degree"].(int64)
-	if !ok {
-		return 0, fmt.Errorf("invalid degree type: %T", resMap["degree"])
-	}
-
-	return int(degree), nil
-}
-
-// GraphRelatedEntities retrieves all entities that have a relationship with the specified entity.
-// It returns a slice of related entities and any error encountered during the operation.
-func (n Neo4J) GraphRelatedEntities(name string) ([]golightrag.GraphEntity, error) {
-	res, err := n.session(func(ctx context.Context, sess neo4j.SessionWithContext) (any, error) {
-		return sess.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-			query := `
-MATCH (n:base {entity_id: $entity_id})
-OPTIONAL MATCH (n)-[r]-(connected:base)
-WHERE connected.entity_id IS NOT NULL
-RETURN n, r, connected`
-			queryRes, err := tx.Run(ctx, query, map[string]any{
-				"entity_id": name,
-			})
-			if err != nil {
-				return nil, fmt.Errorf("failed to run query: %w", err)
-			}
-
-			nodes := make([]dbtype.Node, 0)
+			result := make(map[string]dbtype.Node)
 			for record, err := range queryRes.Records(ctx) {
 				if err != nil {
 					return nil, fmt.Errorf("failed to get result: %w", err)
 				}
 
-				r, ok := record.Get("connected")
+				node, ok := record.Get("n")
 				if !ok {
-					return nil, fmt.Errorf("expected connected key is not found")
-				}
-				if r == nil {
 					continue
 				}
-				resMap, ok := r.(dbtype.Node)
+
+				entityID, ok := record.Get("entity_id")
 				if !ok {
-					return nil, fmt.Errorf("invalid result type, got %T, want dbtype.Node", r)
+					continue
 				}
 
-				nodes = append(nodes, resMap)
+				entityIDStr, ok := entityID.(string)
+				if !ok {
+					continue
+				}
+
+				dbNode, ok := node.(dbtype.Node)
+				if !ok {
+					continue
+				}
+
+				result[entityIDStr] = dbNode
 			}
 
-			return nodes, nil
+			return result, nil
 		})
 	})
 	if err != nil {
 		return nil, err
 	}
-	nodes, ok := res.([]dbtype.Node)
+
+	nodeMap, ok := res.(map[string]dbtype.Node)
 	if !ok {
-		return nil, fmt.Errorf("invalid result type: got %T, want []dbtype.Node", res)
+		return nil, fmt.Errorf("invalid result type, got %T, want map[string]dbtype.Node", res)
 	}
 
-	entities := make([]golightrag.GraphEntity, 0)
-	for _, node := range nodes {
-		entities = append(entities, graphEntityFromNode(node))
+	entities := make(map[string]golightrag.GraphEntity)
+	for name, node := range nodeMap {
+		entities[name] = graphEntityFromNode(node)
 	}
 
 	return entities, nil
+}
+
+// GraphRelationships retrieves multiple relationships between entity pairs from the Neo4j database.
+// It returns a map where the key is "sourceEntity-targetEntity" and the value is the GraphRelationship.
+func (n Neo4J) GraphRelationships(pairs [][2]string) (map[string]golightrag.GraphRelationship, error) {
+	if len(pairs) == 0 {
+		return map[string]golightrag.GraphRelationship{}, nil
+	}
+
+	// Prepare parameters for the query
+	sources := make([]string, len(pairs))
+	targets := make([]string, len(pairs))
+	for i, pair := range pairs {
+		sources[i] = pair[0]
+		targets[i] = pair[1]
+	}
+
+	res, err := n.session(func(ctx context.Context, sess neo4j.SessionWithContext) (any, error) {
+		return sess.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+			query := `
+UNWIND $pairs AS pair
+MATCH (start:base {entity_id: pair[0]})-[r]-(end:base {entity_id: pair[1]})
+RETURN pair[0] as source, pair[1] as target, properties(r) as edge_properties
+			`
+
+			// Convert pairs to a format suitable for the query
+			pairsParam := make([][]string, len(pairs))
+			for i, pair := range pairs {
+				pairsParam[i] = []string{pair[0], pair[1]}
+			}
+
+			queryRes, err := tx.Run(ctx, query, map[string]any{
+				"pairs": pairsParam,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to run query: %w", err)
+			}
+
+			result := make(map[string]map[string]any)
+			for record, err := range queryRes.Records(ctx) {
+				if err != nil {
+					return nil, fmt.Errorf("failed to get result: %w", err)
+				}
+
+				source, sourceOK := record.Get("source")
+				target, targetOK := record.Get("target")
+				edgeProps, propsOK := record.Get("edge_properties")
+
+				if !sourceOK || !targetOK || !propsOK {
+					continue
+				}
+
+				sourceStr, sourceOK := source.(string)
+				targetStr, targetOK := target.(string)
+				props, propsOK := edgeProps.(map[string]any)
+
+				if !sourceOK || !targetOK || !propsOK {
+					continue
+				}
+
+				key := fmt.Sprintf("%s-%s", sourceStr, targetStr)
+				result[key] = props
+			}
+
+			return result, nil
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	propsMap, ok := res.(map[string]map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("invalid result type, got %T, want map[string]map[string]any", res)
+	}
+
+	relationships := make(map[string]golightrag.GraphRelationship)
+	for key, props := range propsMap {
+		parts := strings.Split(key, "-")
+		if len(parts) != 2 {
+			continue
+		}
+
+		rel := graphRelationshipFromEdge(parts[0], parts[1], props)
+		relationships[key] = rel
+	}
+
+	return relationships, nil
+}
+
+// GraphCountEntitiesRelationships counts the number of relationships for multiple entities.
+// It returns a map of entity names to their relationship counts.
+func (n Neo4J) GraphCountEntitiesRelationships(names []string) (map[string]int, error) {
+	if len(names) == 0 {
+		return map[string]int{}, nil
+	}
+
+	res, err := n.session(func(ctx context.Context, sess neo4j.SessionWithContext) (any, error) {
+		return sess.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+			query := `
+MATCH (n:base)
+WHERE n.entity_id IN $entity_ids
+OPTIONAL MATCH (n)-[r]-()
+RETURN n.entity_id AS entity_id, COUNT(r) AS degree
+            `
+			queryRes, err := tx.Run(ctx, query, map[string]any{
+				"entity_ids": names,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to run query: %w", err)
+			}
+
+			result := make(map[string]int64)
+			for record, err := range queryRes.Records(ctx) {
+				if err != nil {
+					return nil, fmt.Errorf("failed to get result: %w", err)
+				}
+
+				entityID, idOK := record.Get("entity_id")
+				degree, degreeOK := record.Get("degree")
+
+				if !idOK || !degreeOK {
+					continue
+				}
+
+				entityIDStr, idOK := entityID.(string)
+				degreeCnt, degreeOK := degree.(int64)
+
+				if !idOK || !degreeOK {
+					continue
+				}
+
+				result[entityIDStr] = degreeCnt
+			}
+
+			return result, nil
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	countMap, ok := res.(map[string]int64)
+	if !ok {
+		return nil, fmt.Errorf("invalid result type, got %T, want map[string]int64", res)
+	}
+
+	// Convert int64 to int
+	counts := make(map[string]int)
+	for name, count := range countMap {
+		counts[name] = int(count)
+	}
+
+	return counts, nil
+}
+
+// GraphRelatedEntities retrieves all entities related to multiple input entities.
+// It returns a map of entity names to slices of related GraphEntity objects.
+func (n Neo4J) GraphRelatedEntities(names []string) (map[string][]golightrag.GraphEntity, error) {
+	if len(names) == 0 {
+		return map[string][]golightrag.GraphEntity{}, nil
+	}
+
+	res, err := n.session(func(ctx context.Context, sess neo4j.SessionWithContext) (any, error) {
+		return sess.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+			query := `
+MATCH (n:base)
+WHERE n.entity_id IN $entity_ids
+OPTIONAL MATCH (n)-[r]-(connected:base)
+WHERE connected.entity_id IS NOT NULL
+RETURN n.entity_id as source_id, collect(connected) as connected_nodes
+            `
+			queryRes, err := tx.Run(ctx, query, map[string]any{
+				"entity_ids": names,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to run query: %w", err)
+			}
+
+			result := make(map[string][]dbtype.Node)
+			for record, err := range queryRes.Records(ctx) {
+				if err != nil {
+					return nil, fmt.Errorf("failed to get result: %w", err)
+				}
+
+				sourceID, sourceOK := record.Get("source_id")
+				connectedNodes, connectedOK := record.Get("connected_nodes")
+
+				if !sourceOK || !connectedOK {
+					continue
+				}
+
+				sourceIDStr, sourceOK := sourceID.(string)
+				nodes, connectedOK := connectedNodes.([]any)
+
+				if !sourceOK || !connectedOK {
+					continue
+				}
+
+				nodeList := make([]dbtype.Node, 0, len(nodes))
+				for _, node := range nodes {
+					if dbNode, ok := node.(dbtype.Node); ok {
+						nodeList = append(nodeList, dbNode)
+					}
+				}
+
+				result[sourceIDStr] = nodeList
+			}
+
+			return result, nil
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	nodesMap, ok := res.(map[string][]dbtype.Node)
+	if !ok {
+		return nil, fmt.Errorf("invalid result type, got %T, want map[string][]dbtype.Node", res)
+	}
+
+	relatedEntities := make(map[string][]golightrag.GraphEntity, len(nodesMap))
+	for name, nodes := range nodesMap {
+		entities := make([]golightrag.GraphEntity, 0, len(nodes))
+		for _, node := range nodes {
+			entities = append(entities, graphEntityFromNode(node))
+		}
+		relatedEntities[name] = entities
+	}
+
+	return relatedEntities, nil
 }
 
 // Close terminates the connection to the Neo4j database.

@@ -167,9 +167,14 @@ func (m *MockStorage) GraphUpsertEntity(entity golightrag.GraphEntity) error {
 	return nil
 }
 
-func (m *MockStorage) VectorUpsertEntity(_, _ string) error {
-	m.vectorUpsertEntityCalled = true
-	return m.vectorUpsertEntityErr
+func (m *MockStorage) GraphEntities(names []string) (map[string]golightrag.GraphEntity, error) {
+	result := make(map[string]golightrag.GraphEntity)
+	for _, name := range names {
+		if entity, exists := m.entities[name]; exists {
+			result[name] = entity
+		}
+	}
+	return result, nil
 }
 
 func (m *MockStorage) GraphUpsertRelationship(relationship golightrag.GraphRelationship) error {
@@ -188,23 +193,59 @@ func (m *MockStorage) GraphUpsertRelationship(relationship golightrag.GraphRelat
 	return nil
 }
 
+func (m *MockStorage) GraphRelationships(pairs [][2]string) (map[string]golightrag.GraphRelationship, error) {
+	result := make(map[string]golightrag.GraphRelationship)
+	for _, pair := range pairs {
+		if len(pair) != 2 {
+			continue
+		}
+		sourceEntity := pair[0]
+		targetEntity := pair[1]
+
+		// Look for the relationship in our mock data
+		lookupKey := fmt.Sprintf("%s:%s", sourceEntity, targetEntity)
+
+		if rel, exists := m.relationships[lookupKey]; exists {
+			// Store with the expected key format
+			key := fmt.Sprintf("%s-%s", sourceEntity, targetEntity)
+			result[key] = rel
+		}
+	}
+	return result, nil
+}
+
+func (m *MockStorage) GraphCountEntitiesRelationships(names []string) (map[string]int, error) {
+	result := make(map[string]int)
+	for _, name := range names {
+		if count, ok := m.entityRelationshipCountMap[name]; ok {
+			result[name] = count
+		} else {
+			result[name] = 0
+		}
+	}
+	return result, nil
+}
+
+func (m *MockStorage) GraphRelatedEntities(names []string) (map[string][]golightrag.GraphEntity, error) {
+	result := make(map[string][]golightrag.GraphEntity)
+	for _, name := range names {
+		if entities, ok := m.entityRelatedEntitiesMap[name]; ok {
+			result[name] = entities
+		} else {
+			result[name] = []golightrag.GraphEntity{}
+		}
+	}
+	return result, nil
+}
+
+func (m *MockStorage) VectorUpsertEntity(_, _ string) error {
+	m.vectorUpsertEntityCalled = true
+	return m.vectorUpsertEntityErr
+}
+
 func (m *MockStorage) VectorUpsertRelationship(_, _, _ string) error {
 	m.vectorUpsertRelationshipCalled = true
 	return m.vectorUpsertRelationshipErr
-}
-
-func (m *MockStorage) GraphCountEntityRelationships(name string) (int, error) {
-	if count, ok := m.entityRelationshipCountMap[name]; ok {
-		return count, nil
-	}
-	return 0, nil
-}
-
-func (m *MockStorage) GraphRelatedEntities(name string) ([]golightrag.GraphEntity, error) {
-	if entities, ok := m.entityRelatedEntitiesMap[name]; ok {
-		return entities, nil
-	}
-	return []golightrag.GraphEntity{}, nil
 }
 
 func (m *MockStorage) VectorQueryEntity(string) ([]string, error) {

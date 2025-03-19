@@ -197,6 +197,7 @@ func localContext(
 	storage Storage,
 	logger *slog.Logger,
 ) ([]EntityContext, []RelationshipContext, []SourceContext, error) {
+	// First find relevant entities using vector similarity search
 	entitiesNames, err := storage.VectorQueryEntity(keywords)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to query entities: %w", err)
@@ -208,20 +209,25 @@ func localContext(
 
 	logger.Debug("Entities names from vector storage", "entitiesNames", entitiesNames)
 
-	var entities []GraphEntity
-	var entitiesContexts []EntityContext
+	// Get full entity details from graph storage
+	entitiesMap, err := storage.GraphEntities(entitiesNames)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to batch get entities: %w", err)
+	}
+	// Get relationship counts to determine entity importance
+	refCountMap, err := storage.GraphCountEntitiesRelationships(entitiesNames)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to batch count relationships: %w", err)
+	}
 
-	for _, name := range entitiesNames {
-		entity, err := storage.GraphEntity(name)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to get entity with name %s: %w", name, err)
-		}
+	entitiesContexts := make([]EntityContext, 0, len(entitiesMap))
+	entities := make([]GraphEntity, 0, len(entitiesMap))
 
+	for name, entity := range entitiesMap {
 		entities = append(entities, entity)
-
-		refCount, err := storage.GraphCountEntityRelationships(name)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to count entity relationships with name %s: %w", name, err)
+		refCount, ok := refCountMap[name]
+		if !ok {
+			refCount = 0
 		}
 
 		entitiesContexts = append(entitiesContexts, EntityContext{
@@ -235,11 +241,13 @@ func localContext(
 
 	logger.Debug("Entities from graph storage", "entities", entities)
 
-	rankedRelationships, err := entitiesRankedRelationship(entities, storage)
+	// Get and rank relationships between the found entities
+	rankedRelationships, err := entitiesRankedRelationships(entities, storage)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get ranked relationships: %w", err)
 	}
 
+	// Get and rank source documents referenced by the found entities
 	rankedSources, err := entitiesRankedSources(entities, storage)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get ranked sources: %w", err)
@@ -253,6 +261,8 @@ func globalContext(
 	storage Storage,
 	logger *slog.Logger,
 ) ([]EntityContext, []RelationshipContext, []SourceContext, error) {
+	// Start by querying relationships (unlike localContext which queries entities first)
+	// This prioritizes connections between concepts rather than specific entities
 	relationshipNames, err := storage.VectorQueryRelationship(keywords)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to query relationships: %w", err)
@@ -264,49 +274,63 @@ func globalContext(
 
 	logger.Debug("Relationship names from vector storage", "relationshipNames", relationshipNames)
 
-	var relationships []GraphRelationship
-	var relationshipsContexts []RelationshipContext
+	// Get full details of the relationships from graph storage
+	relationshipsMap, err := storage.GraphRelationships(relationshipNames)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to query relationships: %w", err)
+	}
 
-	for _, rel := range relationshipNames {
-		sourceEntity, targetEntity := rel[0], rel[1]
+	// Collect all unique entity names that are part of these relationships
+	entitiesNames := make([]string, 0, len(relationshipsMap))
+	for _, rel := range relationshipsMap {
+		entitiesNames = appendIfUnique(entitiesNames, rel.SourceEntity)
+		entitiesNames = appendIfUnique(entitiesNames, rel.TargetEntity)
+	}
 
-		relationship, err := storage.GraphRelationship(sourceEntity, targetEntity)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to get relationship for source entity %s and target entity %s: %w",
-				sourceEntity, targetEntity, err)
+	// Get relationship counts for relevance scoring
+	refCountMap, err := storage.GraphCountEntitiesRelationships(entitiesNames)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to batch count relationships: %w", err)
+	}
+
+	relationships := make([]GraphRelationship, 0, len(relationshipsMap))
+	relationshipsContexts := make([]RelationshipContext, 0, len(relationshipsMap))
+
+	for _, rel := range relationshipsMap {
+		relationships = append(relationships, rel)
+
+		// Calculate importance score by summing relationship counts of both entities
+		sourceDegree, ok := refCountMap[rel.SourceEntity]
+		if !ok {
+			sourceDegree = 0
 		}
-
-		relationships = append(relationships, relationship)
-
-		sourceDegree, err := storage.GraphCountEntityRelationships(sourceEntity)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to count entity relationships with name %s: %w", sourceEntity, err)
-		}
-		targetDegree, err := storage.GraphCountEntityRelationships(targetEntity)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to count entity relationships with name %s: %w", targetEntity, err)
+		targetDegree, ok := refCountMap[rel.TargetEntity]
+		if !ok {
+			targetDegree = 0
 		}
 
 		refCount := sourceDegree + targetDegree
-		keywordsStr := strings.Join(relationship.Keywords, GraphFieldSeparator)
+		keywordsStr := strings.Join(rel.Keywords, GraphFieldSeparator)
 		relationshipsContexts = append(relationshipsContexts, RelationshipContext{
-			Source:      sourceEntity,
-			Target:      targetEntity,
+			Source:      rel.SourceEntity,
+			Target:      rel.TargetEntity,
 			Keywords:    keywordsStr,
-			Description: relationship.Descriptions,
-			Weight:      relationship.Weight,
+			Description: rel.Descriptions,
+			Weight:      rel.Weight,
 			RefCount:    refCount,
-			CreatedAt:   relationship.CreatedAt,
+			CreatedAt:   rel.CreatedAt,
 		})
 	}
 
 	logger.Debug("Relationships from graph storage", "relationships", relationships)
 
+	// Get entities connected by these relationships (inverse of localContext flow)
 	rankedEntities, err := relationshipsRankedEntities(relationships, storage)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get ranked entities: %w", err)
 	}
 
+	// Get source documents referenced by these relationships
 	rankedSources, err := relationshipsRankedSources(relationships, storage)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get ranked sources: %w", err)
@@ -315,46 +339,69 @@ func globalContext(
 	return rankedEntities, relationshipsContexts, rankedSources, nil
 }
 
-func entitiesRankedRelationship(entities []GraphEntity, storage Storage) ([]RelationshipContext, error) {
-	relationshipCountMap := make(map[string]int)
-	relationshipMap := make(map[string]GraphRelationship)
-	for _, entity := range entities {
-		relEntities, err := storage.GraphRelatedEntities(entity.Name)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get related entities for entity %s: %w", entity.Name, err)
-		}
-		for _, relEntity := range relEntities {
-			rel, err := storage.GraphRelationship(entity.Name, relEntity.Name)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get relationship for entity %s and %s: %w", entity.Name, relEntity.Name, err)
-			}
-
-			srcDegree, err := storage.GraphCountEntityRelationships(entity.Name)
-			if err != nil {
-				return nil, fmt.Errorf("failed to count entity relationships with name %s: %w", entity.Name, err)
-			}
-			tgtDegree, err := storage.GraphCountEntityRelationships(relEntity.Name)
-			if err != nil {
-				return nil, fmt.Errorf("failed to count entity relationships with name %s: %w", relEntity.Name, err)
-			}
-
-			key := fmt.Sprintf("%s-%s", rel.SourceEntity, rel.TargetEntity)
-			relationshipMap[key] = rel
-			relationshipCountMap[key] = srcDegree + tgtDegree
-		}
+func entitiesRankedRelationships(entities []GraphEntity, storage Storage) ([]RelationshipContext, error) {
+	entityNames := make([]string, len(entities))
+	for i, entity := range entities {
+		entityNames[i] = entity.Name
 	}
 
-	result := make([]RelationshipContext, 0, len(relationshipCountMap))
-	for key, count := range relationshipCountMap {
-		rel := relationshipMap[key]
-		keywords := strings.Join(rel.Keywords, GraphFieldSeparator)
+	// Get entities that are directly connected to our search results
+	relationEntitiesMap, err := storage.GraphRelatedEntities(entityNames)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get related entities: %w", err)
+	}
+	// Create pairs of entity names to retrieve their connecting relationships
+	relationshipPairs := make([][2]string, 0)
+	allEntities := make([]string, 0)
+	allEntities = append(allEntities, entityNames...)
+	for name, entities := range relationEntitiesMap {
+		for _, entity := range entities {
+			relationshipPairs = append(relationshipPairs, [2]string{name, entity.Name})
+		}
+		allEntities = appendIfUnique(allEntities, name)
+	}
+
+	// Fetch actual relationship data for all the entity pairs
+	relationshipsMap, err := storage.GraphRelationships(relationshipPairs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query relationships: %w", err)
+	}
+
+	// Count relationships for relevance scoring
+	refCountMap, err := storage.GraphCountEntitiesRelationships(allEntities)
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch count relationships: %w", err)
+	}
+
+	result := make([]RelationshipContext, 0, len(relationshipsMap))
+	for key, rel := range relationshipsMap {
+		// Parse composite key back into source and target entities
+		arrKey := strings.Split(key, "-")
+		if len(arrKey) != 2 {
+			continue
+		}
+		source := arrKey[0]
+		target := arrKey[1]
+
+		// Calculate importance by summing relationship counts of both entities
+		sourceDegree, ok := refCountMap[source]
+		if !ok {
+			sourceDegree = 0
+		}
+		targetDegree, ok := refCountMap[target]
+		if !ok {
+			targetDegree = 0
+		}
+
+		refCount := sourceDegree + targetDegree
+		keywordsStr := strings.Join(rel.Keywords, GraphFieldSeparator)
 		result = append(result, RelationshipContext{
-			Source:      rel.SourceEntity,
-			Target:      rel.TargetEntity,
-			Keywords:    keywords,
+			Source:      source,
+			Target:      target,
+			Keywords:    keywordsStr,
 			Description: rel.Descriptions,
 			Weight:      rel.Weight,
-			RefCount:    count,
+			RefCount:    refCount,
 			CreatedAt:   rel.CreatedAt,
 		})
 	}
@@ -363,8 +410,14 @@ func entitiesRankedRelationship(entities []GraphEntity, storage Storage) ([]Rela
 }
 
 func entitiesRankedSources(entities []GraphEntity, storage Storage) ([]SourceContext, error) {
+	entityNames := make([]string, len(entities))
+
+	// Track sources and their reference counts across entities and relationships
 	sourceIDCountMap := make(map[string]int)
-	for _, entity := range entities {
+	for i, entity := range entities {
+		entityNames[i] = entity.Name
+
+		// Initially collect all source IDs from primary entities
 		arrSourceID := strings.SplitSeq(entity.SourceIDs, GraphFieldSeparator)
 		for sourceID := range arrSourceID {
 			if sourceID == "" {
@@ -378,11 +431,14 @@ func entitiesRankedSources(entities []GraphEntity, storage Storage) ([]SourceCon
 		}
 	}
 
-	for _, entity := range entities {
-		relEntities, err := storage.GraphRelatedEntities(entity.Name)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get related entities for entity %s: %w", entity.Name, err)
-		}
+	// Get related entities to find their sources too
+	relatedEntitiesMap, err := storage.GraphRelatedEntities(entityNames)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get related entities: %w", err)
+	}
+
+	// Count occurrences of each source in related entities to determine relevance
+	for _, relEntities := range relatedEntitiesMap {
 		for _, relEntity := range relEntities {
 			arrSourceID := strings.SplitSeq(relEntity.SourceIDs, GraphFieldSeparator)
 			for sourceID := range arrSourceID {
@@ -397,6 +453,7 @@ func entitiesRankedSources(entities []GraphEntity, storage Storage) ([]SourceCon
 		}
 	}
 
+	// Retrieve actual source content for each ID and build the result
 	result := make([]SourceContext, 0, len(sourceIDCountMap))
 	for id, count := range sourceIDCountMap {
 		source, err := storage.KVSource(id)
@@ -413,31 +470,37 @@ func entitiesRankedSources(entities []GraphEntity, storage Storage) ([]SourceCon
 }
 
 func relationshipsRankedEntities(relationships []GraphRelationship, storage Storage) ([]EntityContext, error) {
+	// Extract all unique entity names from both sides of the relationships
 	entityNames := make([]string, 0, len(relationships))
 	for _, rel := range relationships {
 		entityNames = appendIfUnique(entityNames, rel.SourceEntity)
 		entityNames = appendIfUnique(entityNames, rel.TargetEntity)
 	}
 
-	entities := make([]EntityContext, 0, len(entityNames))
-	for _, entityName := range entityNames {
-		if entityName == "" {
-			continue
-		}
+	// Get full entity details from storage
+	entitiesMap, err := storage.GraphEntities(entityNames)
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch get entities: %w", err)
+	}
 
-		entity, err := storage.GraphEntity(entityName)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get entity with name %s: %w", entityName, err)
-		}
-		degree, err := storage.GraphCountEntityRelationships(entityName)
-		if err != nil {
-			return nil, fmt.Errorf("failed to count entity relationships with name %s: %w", entityName, err)
+	// Get relationship counts to determine entity importance
+	refCountMap, err := storage.GraphCountEntitiesRelationships(entityNames)
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch count relationships: %w", err)
+	}
+
+	// Construct result with reference counts for ranking
+	entities := make([]EntityContext, 0, len(entitiesMap))
+	for name, entity := range entitiesMap {
+		refCount, ok := refCountMap[name]
+		if !ok {
+			refCount = 0
 		}
 		entities = append(entities, EntityContext{
 			Name:        entity.Name,
 			Type:        entity.Type,
 			Description: entity.Descriptions,
-			RefCount:    degree,
+			RefCount:    refCount,
 			CreatedAt:   entity.CreatedAt,
 		})
 	}
@@ -446,29 +509,38 @@ func relationshipsRankedEntities(relationships []GraphRelationship, storage Stor
 }
 
 func relationshipsRankedSources(relationships []GraphRelationship, storage Storage) ([]SourceContext, error) {
+	// Track sources and their reference counts across relationships
 	sourcesMap := make(map[string]SourceContext)
 	for _, rel := range relationships {
+		// Parse source IDs from the relationship
 		arrSourceIDs := strings.SplitSeq(rel.SourceIDs, GraphFieldSeparator)
 		for sourceID := range arrSourceIDs {
 			if sourceID == "" {
 				continue
 			}
+
+			// Retrieve source content from storage
 			source, err := storage.KVSource(sourceID)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get source with id %s: %w", sourceID, err)
 			}
+
+			// Initialize source entry if it's new
 			_, ok := sourcesMap[sourceID]
 			if !ok {
 				sourcesMap[sourceID] = SourceContext{
 					Content: source.Content,
 				}
 			}
+
+			// Increment reference count for this source
 			src := sourcesMap[sourceID]
 			src.RefCount++
 			sourcesMap[sourceID] = src
 		}
 	}
 
+	// Convert map to slice for return
 	sources := make([]SourceContext, len(sourcesMap))
 	i := 0
 	for _, source := range sourcesMap {
@@ -480,6 +552,7 @@ func relationshipsRankedSources(relationships []GraphRelationship, storage Stora
 }
 
 func combineContexts(headers []string, ctx1, ctx2 []refContext) string {
+	// Merge contexts from both sources, with later ones overwriting duplicates
 	resMap := make(map[string]refContext)
 	for _, ctx := range ctx1 {
 		resMap[ctx.context] = ctx
@@ -488,15 +561,18 @@ func combineContexts(headers []string, ctx1, ctx2 []refContext) string {
 		resMap[ctx.context] = ctx
 	}
 
+	// Convert map to slice for sorting
 	arrRes := make([]refContext, 0, len(resMap))
 	for _, ctx := range resMap {
 		arrRes = append(arrRes, ctx)
 	}
 
+	// Sort by reference count in descending order (most relevant first)
 	slices.SortFunc(arrRes, func(a, b refContext) int {
 		return cmp.Compare(b.refCount, a.refCount)
 	})
 
+	// Format as CSV with numbered IDs
 	res := strings.Join(headers, ",") + "\n"
 	for i, ctx := range arrRes {
 		idStr := strconv.Itoa(i)
