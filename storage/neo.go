@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	golightrag "github.com/MegaGrindStone/go-light-rag"
@@ -79,6 +80,7 @@ func graphRelationshipFromEdge(source, target string, props map[string]any) goli
 	if !ok {
 		keywords = ""
 	}
+	arrKeywords := strings.Split(keywords, golightrag.GraphFieldSeparator)
 	sourceIDs, ok := props["source_ids"].(string)
 	if !ok {
 		sourceIDs = ""
@@ -97,7 +99,7 @@ func graphRelationshipFromEdge(source, target string, props map[string]any) goli
 		TargetEntity: target,
 		Weight:       weight,
 		Descriptions: description,
-		Keywords:     keywords,
+		Keywords:     arrKeywords,
 		SourceIDs:    sourceIDs,
 		CreatedAt:    createdAt,
 	}
@@ -218,6 +220,7 @@ SET n:%s`, "`"+entity.Type+"`"),
 func (n Neo4J) GraphUpsertRelationship(relationship golightrag.GraphRelationship) error {
 	_, err := n.session(func(ctx context.Context, sess neo4j.SessionWithContext) (any, error) {
 		return sess.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+			keywords := strings.Join(relationship.Keywords, golightrag.GraphFieldSeparator)
 			return tx.Run(
 				ctx,
 				`
@@ -233,7 +236,7 @@ SET r += $properties
 					"properties": map[string]any{
 						"weight":      relationship.Weight,
 						"description": relationship.Descriptions,
-						"keywords":    relationship.Keywords,
+						"keywords":    keywords,
 						"source_ids":  relationship.SourceIDs,
 						"created_at":  relationship.CreatedAt.Format(time.RFC3339),
 					},

@@ -69,7 +69,7 @@ func TestQuery(t *testing.T) {
 					SourceEntity: "ENTITY1",
 					TargetEntity: "ENTITY2",
 					Descriptions: "Entity1 is related to Entity2",
-					Keywords:     "RELATED_TO",
+					Keywords:     []string{"RELATED_TO", "RELATED", "TO"},
 					Weight:       1.0,
 					SourceIDs:    "doc-1-chunk-0",
 				},

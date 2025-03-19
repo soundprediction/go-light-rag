@@ -265,10 +265,11 @@ func globalContext(
 		}
 
 		refCount := sourceDegree + targetDegree
+		keywordsStr := strings.Join(relationship.Keywords, GraphFieldSeparator)
 		relationshipsContexts = append(relationshipsContexts, RelationshipContext{
 			Source:      sourceEntity,
 			Target:      targetEntity,
-			Keywords:    relationship.Keywords,
+			Keywords:    keywordsStr,
 			Description: relationship.Descriptions,
 			Weight:      relationship.Weight,
 			RefCount:    refCount,
@@ -323,10 +324,11 @@ func entitiesRankedRelationship(entities []GraphEntity, storage Storage) ([]Rela
 	result := make([]RelationshipContext, 0, len(relationshipCountMap))
 	for key, count := range relationshipCountMap {
 		rel := relationshipMap[key]
+		keywords := strings.Join(rel.Keywords, GraphFieldSeparator)
 		result = append(result, RelationshipContext{
 			Source:      rel.SourceEntity,
 			Target:      rel.TargetEntity,
-			Keywords:    rel.Keywords,
+			Keywords:    keywords,
 			Description: rel.Descriptions,
 			Weight:      rel.Weight,
 			RefCount:    count,
@@ -340,7 +342,7 @@ func entitiesRankedRelationship(entities []GraphEntity, storage Storage) ([]Rela
 func entitiesRankedSources(entities []GraphEntity, storage Storage) ([]SourceContext, error) {
 	sourceIDCountMap := make(map[string]int)
 	for _, entity := range entities {
-		arrSourceID := strings.SplitSeq(entity.SourceIDs, graphFieldSeparator)
+		arrSourceID := strings.SplitSeq(entity.SourceIDs, GraphFieldSeparator)
 		for sourceID := range arrSourceID {
 			if sourceID == "" {
 				continue
@@ -359,7 +361,7 @@ func entitiesRankedSources(entities []GraphEntity, storage Storage) ([]SourceCon
 			return nil, fmt.Errorf("failed to get related entities for entity %s: %w", entity.Name, err)
 		}
 		for _, relEntity := range relEntities {
-			arrSourceID := strings.SplitSeq(relEntity.SourceIDs, graphFieldSeparator)
+			arrSourceID := strings.SplitSeq(relEntity.SourceIDs, GraphFieldSeparator)
 			for sourceID := range arrSourceID {
 				if sourceID == "" {
 					continue
@@ -422,7 +424,7 @@ func relationshipsRankedEntities(relationships []GraphRelationship, storage Stor
 func relationshipsRankedSources(relationships []GraphRelationship, storage Storage) ([]SourceContext, error) {
 	sourcesMap := make(map[string]SourceContext)
 	for _, rel := range relationships {
-		arrSourceIDs := strings.SplitSeq(rel.SourceIDs, graphFieldSeparator)
+		arrSourceIDs := strings.SplitSeq(rel.SourceIDs, GraphFieldSeparator)
 		for sourceID := range arrSourceIDs {
 			if sourceID == "" {
 				continue

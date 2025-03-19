@@ -11,7 +11,7 @@ import (
 	golightrag "github.com/MegaGrindStone/go-light-rag"
 )
 
-//nolint:gocognit
+//nolint:gocognit,gocyclo // Ignore complexity for this test
 func TestInsert(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	// logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
@@ -26,10 +26,30 @@ func TestInsert(t *testing.T) {
 
 		// Create mock LLM that returns valid entity and relationship extraction
 		mockLLM := &MockLLM{
-			chatResponse: `("entity"<|>"ENTITY1"<|>"PERSON"<|>"This is a description of Entity1")##
-("entity"<|>"ENTITY2"<|>"ORGANIZATION"<|>"This is a description of Entity2")##
-("relationship"<|>"ENTITY1"<|>"ENTITY2"<|>"Entity1 is related to Entity2"<|>"RELATED_TO"<|>"1.0")##
-<|COMPLETE|>`,
+			chatResponse: `
+{
+  "entities": [
+    {
+      "entity_name": "ENTITY1",
+      "entity_type": "PERSON",
+      "entity_description": "This is a description of Entity1"
+    },
+    {
+      "entity_name": "ENTITY2",
+      "entity_type": "ORGANIZATION",
+      "entity_description": "This is a description of Entity2"
+    }
+  ],
+  "relationships": [
+    {
+      "source_entity": "ENTITY1", 
+      "target_entity": "ENTITY2",
+      "relationship_description": "Entity1 is related to Entity2",
+      "relationship_keywords": ["RELATED_TO", "RELATED", "TO"],
+      "relationship_strength": 1.0
+    }
+  ]
+}`,
 			chatCalls: make([][]string, 0),
 		}
 
@@ -87,7 +107,7 @@ func TestInsert(t *testing.T) {
 
 		// Verify that entities were extracted and stored
 		if len(storage.entities) != 2 {
-			t.Errorf("Expected 2 entities, got %d", len(storage.entities))
+			t.Errorf("Expected 2 entities, got %d %+v", len(storage.entities), storage.entities)
 		}
 
 		// Check entity1 values
@@ -130,24 +150,32 @@ func TestInsert(t *testing.T) {
 		relKey := "ENTITY1:ENTITY2"
 		rel, exists := storage.relationships[relKey]
 		if !exists {
-			t.Error("Expected ENTITY1-ENTITY2 relationship to be stored")
-		} else {
-			if rel.SourceEntity != "ENTITY1" {
-				t.Errorf("Expected relationship source to be ENTITY1, got %s", rel.SourceEntity)
-			}
-			if rel.TargetEntity != "ENTITY2" {
-				t.Errorf("Expected relationship target to be ENTITY2, got %s", rel.TargetEntity)
-			}
-			if !strings.Contains(rel.Descriptions, "Entity1 is related to Entity2") {
-				t.Errorf("Expected relationship description to contain 'Entity1 is related to Entity2', got %s", rel.Descriptions)
-			}
-			if !strings.Contains(rel.Keywords, "RELATED_TO") {
-				t.Errorf("Expected relationship keywords to contain 'RELATED_TO', got %s", rel.Keywords)
-			}
-			expectedSourceID := fmt.Sprintf("%s-chunk-0", doc.ID)
-			if !strings.Contains(rel.SourceIDs, expectedSourceID) {
-				t.Errorf("Expected source ID %s in relationship SourceIDs: %s", expectedSourceID, rel.SourceIDs)
-			}
+			t.Fatalf("Expected ENTITY1-ENTITY2 relationship to be stored")
+		}
+		if rel.SourceEntity != "ENTITY1" {
+			t.Errorf("Expected relationship source to be ENTITY1, got %s", rel.SourceEntity)
+		}
+		if rel.TargetEntity != "ENTITY2" {
+			t.Errorf("Expected relationship target to be ENTITY2, got %s", rel.TargetEntity)
+		}
+		if !strings.Contains(rel.Descriptions, "Entity1 is related to Entity2") {
+			t.Errorf("Expected relationship description to contain 'Entity1 is related to Entity2', got %s", rel.Descriptions)
+		}
+		if len(rel.Keywords) != 3 {
+			t.Fatalf("Expected relationship keywords to contain 3 keywords, got %d", len(rel.Keywords))
+		}
+		if !strings.Contains(rel.Keywords[0], "RELATED_TO") {
+			t.Errorf("Expected relationship keywords to contain 'RELATED_TO', got %s", rel.Keywords[0])
+		}
+		if !strings.Contains(rel.Keywords[1], "RELATED") {
+			t.Errorf("Expected relationship keywords to contain 'RELATED', got %s", rel.Keywords[1])
+		}
+		if !strings.Contains(rel.Keywords[2], "TO") {
+			t.Errorf("Expected relationship keywords to contain 'TO', got %s", rel.Keywords[2])
+		}
+		expectedSourceID := fmt.Sprintf("%s-chunk-0", doc.ID)
+		if !strings.Contains(rel.SourceIDs, expectedSourceID) {
+			t.Errorf("Expected source ID %s in relationship SourceIDs: %s", expectedSourceID, rel.SourceIDs)
 		}
 	})
 

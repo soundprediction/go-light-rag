@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	golightrag "github.com/MegaGrindStone/go-light-rag"
 	"github.com/MegaGrindStone/go-light-rag/internal"
@@ -31,6 +32,7 @@ type Default struct {
 // during RAG operations, including retry behavior and token length limits.
 type DocumentConfig struct {
 	MaxRetries              int
+	BackoffDuration         time.Duration
 	ConcurrencyCount        int
 	GleanCount              int
 	MaxSummariesTokenLength int
@@ -41,6 +43,7 @@ const (
 	defaultChunkOverlapTokenSize   = 100
 	defaultLanguage                = "English"
 	defaultMaxSummariesTokenLength = 1200
+	defaultBackoffDuration         = 1 * time.Second
 	defaultConcurrencyCount        = 1
 )
 
@@ -113,6 +116,15 @@ func (d Default) EntityExtractionPromptData() golightrag.EntityExtractionPromptD
 // as configured in the DocumentConfig.
 func (d Default) MaxRetries() int {
 	return d.Config.MaxRetries
+}
+
+// BackoffDuration returns the backoff duration between retries for RAG operations
+// as configured in the DocumentConfig.
+func (d Default) BackoffDuration() time.Duration {
+	if d.Config.BackoffDuration == 0 {
+		return defaultBackoffDuration
+	}
+	return d.Config.BackoffDuration
 }
 
 // ConcurrencyCount returns the number of concurrent requests to the LLM

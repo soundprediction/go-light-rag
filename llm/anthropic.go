@@ -76,7 +76,7 @@ func (a Anthropic) Chat(messages []string) (string, error) {
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
 
 	resp, err := a.doRequest(ctx, msgs)

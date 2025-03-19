@@ -106,7 +106,7 @@ func (c Chromem) VectorUpsertEntity(name, content string) error {
 		},
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
 
 	return c.EntitiesColl.AddDocument(ctx, doc)

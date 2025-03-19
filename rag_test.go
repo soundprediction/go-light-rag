@@ -3,6 +3,7 @@ package golightrag_test
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	golightrag "github.com/MegaGrindStone/go-light-rag"
 )
@@ -14,6 +15,7 @@ type MockDocumentHandler struct {
 
 	maxRetries       int
 	concurrencyCount int
+	backoffDuration  time.Duration
 	gleanCount       int
 	maxTokenLen      int
 }
@@ -75,6 +77,10 @@ func (m *MockDocumentHandler) EntityExtractionPromptData() golightrag.EntityExtr
 
 func (m *MockDocumentHandler) MaxRetries() int {
 	return m.maxRetries
+}
+
+func (m *MockDocumentHandler) BackoffDuration() time.Duration {
+	return m.backoffDuration
 }
 
 func (m *MockDocumentHandler) ConcurrencyCount() int {

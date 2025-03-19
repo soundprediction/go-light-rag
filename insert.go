@@ -1,13 +1,12 @@
 package golightrag
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-	"regexp"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -29,6 +28,8 @@ type DocumentHandler interface {
 	MaxRetries() int
 	// ConcurrencyCount determines the number of concurrent requests to the LLM.
 	ConcurrencyCount() int
+	// BackoffDuration determines the backoff duration between retries.
+	BackoffDuration() time.Duration
 	GleanCount() int
 	MaxSummariesTokenLength() int
 }
@@ -46,12 +47,8 @@ type summarizeDescriptionsPromptData struct {
 	Language     string
 }
 
-const (
-	fieldDelimiter      = "<|>"
-	recordDelimiter     = "##"
-	completeDelimiter   = "<|COMPLETE|>"
-	graphFieldSeparator = "<SEP>"
-)
+// GraphFieldSeparator is a constant used to separate fields in a graph.
+const GraphFieldSeparator = "<SEP>"
 
 // Insert processes a document and stores it in the provided storage.
 // It chunks the document content, extracts entities and relationships using the provided
@@ -97,7 +94,7 @@ func Insert(doc Document, handler DocumentHandler, storage Storage, llm LLM, log
 
 	if err := extractEntities(doc.ID, chunks, llm,
 		handler.EntityExtractionPromptData(), handler.MaxRetries(), llmConcurrencyCount, handler.GleanCount(),
-		handler.MaxSummariesTokenLength(), storage, logger); err != nil {
+		handler.MaxSummariesTokenLength(), handler.BackoffDuration(), storage, logger); err != nil {
 		return fmt.Errorf("failed to extract entities: %w", err)
 	}
 
@@ -110,6 +107,7 @@ func extractEntities(
 	llm LLM,
 	extractPromptData EntityExtractionPromptData,
 	llmMaxRetries, llmConcurrencyCount, llmMaxGleanCount, summariesMaxToken int,
+	backoffDuration time.Duration,
 	storage Storage,
 	logger *slog.Logger,
 ) error {
@@ -130,7 +128,7 @@ func extractEntities(
 			defer func() { <-sem }()
 
 			entities, relationships, err := llmExtractEntities(source.Content,
-				extractPromptData, llmMaxRetries, llmMaxGleanCount, llm, logger)
+				extractPromptData, llmMaxRetries, llmMaxGleanCount, backoffDuration, llm, logger)
 			if err != nil {
 				return fmt.Errorf("failed to extract entities with LLM: %w", err)
 			}
@@ -168,6 +166,7 @@ func llmExtractEntities(
 	content string,
 	data EntityExtractionPromptData,
 	maxRetries, maxGleanCount int,
+	backoffDuration time.Duration,
 	llm LLM,
 	logger *slog.Logger,
 ) (map[string][]GraphEntity, map[string][]GraphRelationship, error) {
@@ -184,14 +183,22 @@ func llmExtractEntities(
 	logger.Debug("Use LLM to extract entities from source",
 		"extractPrompt", extractPrompt, "gleanPrompt", gleanPrompt, "source", content)
 
+	type llmResult struct {
+		Entities      []GraphEntity       `json:"entities"`
+		Relationships []GraphRelationship `json:"relationships"`
+	}
+
+	var results llmResult
+
 	retry := 0
 
-	var entities map[string][]GraphEntity
-	var relationships map[string][]GraphRelationship
-
 	for {
+		// If this is not a first retry, add backoff delay.
+		if retry > 0 {
+			time.Sleep(backoffDuration)
+		}
 		// LLM sometimes returns incorrect format, retry up to maxRetries() times.
-		if retry > maxRetries {
+		if retry >= maxRetries {
 			return nil, nil, fmt.Errorf("failed to extract entities after %d retries", maxRetries)
 		}
 
@@ -206,6 +213,17 @@ func llmExtractEntities(
 			logger.Warn("Retry extract", "retry", retry, "error", nErr)
 			continue
 		}
+
+		var sourceParsed llmResult
+		err = json.Unmarshal([]byte(sourceResult), &sourceParsed)
+		if err != nil {
+			nErr := fmt.Errorf("failed to parse llm result: %w", err)
+			retry++
+			logger.Warn("Retry parse result", "retry", retry, "error", nErr)
+			continue
+		}
+		results.Entities = append(results.Entities, sourceParsed.Entities...)
+		results.Relationships = append(results.Relationships, sourceParsed.Relationships...)
 
 		histories = append(histories, sourceResult)
 
@@ -222,7 +240,17 @@ func llmExtractEntities(
 			}
 
 			histories = append(histories, gleanResult)
-			sourceResult += gleanResult
+
+			var gleanParsed llmResult
+			err = json.Unmarshal([]byte(gleanResult), &gleanParsed)
+			if err != nil {
+				nErr := fmt.Errorf("failed to parse llm result: %w", err)
+				retry++
+				logger.Warn("Retry parse result", "retry", retry, "error", nErr)
+				continue
+			}
+			results.Entities = append(results.Entities, gleanParsed.Entities...)
+			results.Relationships = append(results.Relationships, gleanParsed.Relationships...)
 
 			gleanCount++
 			if gleanCount > maxGleanCount {
@@ -250,137 +278,50 @@ func llmExtractEntities(
 			}
 		}
 
-		entities, relationships, err = parseLLMResult(sourceResult, data.EntityTypes)
-		if err != nil {
-			nErr := fmt.Errorf("failed to parse llm result: %w", err)
-			retry++
-			logger.Warn("Retry parse result", "retry", retry, "error", nErr)
-			continue
-		}
-
+		entities, relationships := dedupeLLMResult(results.Entities, results.Relationships, data.EntityTypes)
 		return entities, relationships, nil
 	}
 }
 
-// parseLLMResult parses the result from LLM and returns a map of entities and relationships
-// based on defined at extractEntitiesPrompt. Although it can be done using responseFormat or
-// structuredOutput, many LLM models is not supporting it yet.
-//
-//nolint:gocognit
-func parseLLMResult(
-	result string,
-	entityTypes []string) (
-	map[string][]GraphEntity, map[string][]GraphRelationship, error,
-) {
-	arrBatch := strings.Split(result, completeDelimiter)
-	if len(arrBatch) <= 1 {
-		return nil, nil, fmt.Errorf("no complete delimiter found in result: %s", result)
-	}
+func dedupeLLMResult(
+	entities []GraphEntity,
+	relationships []GraphRelationship,
+	entityTypes []string,
+) (map[string][]GraphEntity, map[string][]GraphRelationship) {
+	ents := make(map[string][]GraphEntity, 0)
+	rels := make(map[string][]GraphRelationship, 0)
 
 	expectedEntityTypes := make([]string, 0)
-	expectedEntityTypes = append(expectedEntityTypes, entityTypes...)
+	for _, et := range entityTypes {
+		expectedEntityTypes = append(expectedEntityTypes, strings.ToUpper(et))
+	}
 	expectedEntityTypes = append(expectedEntityTypes, "UNKNOWN")
 
-	entities := make(map[string][]GraphEntity, 0)
-	relationships := make(map[string][]GraphRelationship, 0)
-
-	for _, batch := range arrBatch {
-		arrRes := strings.SplitSeq(batch, recordDelimiter)
-
-		for res := range arrRes {
-			res = strings.TrimSpace(res)
-			res = strings.TrimPrefix(res, "(")
-			res = strings.TrimSuffix(res, ")")
-			if res == "" {
-				continue
-			}
-
-			arrFields := strings.Split(res, fieldDelimiter)
-			if len(arrFields) < 1 {
-				return nil, nil, fmt.Errorf("no fields found in result")
-			}
-
-			field := arrFields[0]
-			field = strings.Trim(field, "\"")
-
-			switch field {
-			case "entity":
-				if len(arrFields) != 4 {
-					return nil, nil, fmt.Errorf("invalid entity format from result: %s", res)
-				}
-				entityName := strings.ToUpper(normalizeLLMResultField(arrFields[1]))
-				if entityName == "" {
-					continue
-				}
-				entityType := strings.ToUpper(normalizeLLMResultField(arrFields[2]))
-				if entityType == "" {
-					entityType = "UNKNOWN"
-				}
-				if !slices.Contains(expectedEntityTypes, entityType) {
-					return nil, nil, fmt.Errorf("invalid entity type from result: %s", res)
-				}
-
-				entity := GraphEntity{
-					Name:         entityName,
-					Type:         entityType,
-					Descriptions: normalizeLLMResultField(arrFields[3]),
-				}
-				if _, ok := entities[entity.Name]; !ok {
-					entities[entity.Name] = make([]GraphEntity, 0)
-				}
-				entities[entity.Name] = append(entities[entity.Name], entity)
-			case "relationship":
-				if len(arrFields) != 6 {
-					return nil, nil, fmt.Errorf("invalid relationship format from result: %s", res)
-				}
-				sourceEntity := strings.ToUpper(normalizeLLMResultField(arrFields[1]))
-				if sourceEntity == "" {
-					continue
-				}
-				targetEntity := strings.ToUpper(normalizeLLMResultField(arrFields[2]))
-				if targetEntity == "" {
-					continue
-				}
-
-				weight, err := strconv.ParseFloat(arrFields[5], 64)
-				if err != nil {
-					weight = 1.0
-				}
-				relationship := GraphRelationship{
-					SourceEntity: sourceEntity,
-					TargetEntity: targetEntity,
-					Descriptions: normalizeLLMResultField(arrFields[3]),
-					Keywords:     normalizeLLMResultField(arrFields[4]),
-					Weight:       weight,
-				}
-				relationKey := fmt.Sprintf("%s-%s", relationship.SourceEntity, relationship.TargetEntity)
-				if _, ok := relationships[relationKey]; !ok {
-					relationships[relationKey] = make([]GraphRelationship, 0)
-				}
-				relationships[relationKey] = append(relationships[relationKey], relationship)
-			case "content_keywords":
-				// Unused fields
-				continue
-			default:
-				return nil, nil, fmt.Errorf("invalid field type: %s, from result: %s", field, res)
-			}
+	for _, entity := range entities {
+		entity.Type = strings.ToUpper(entity.Type)
+		if !slices.Contains(expectedEntityTypes, entity.Type) {
+			// If llm returns invalid entity type, use UNKNOWN.
+			entity.Type = "UNKNOWN"
 		}
+
+		entity.Name = strings.ToUpper(entity.Name)
+		if _, ok := ents[entity.Name]; !ok {
+			ents[entity.Name] = make([]GraphEntity, 0)
+		}
+		ents[entity.Name] = append(ents[entity.Name], entity)
 	}
 
-	return entities, relationships, nil
-}
+	for _, relationship := range relationships {
+		relationship.SourceEntity = strings.ToUpper(relationship.SourceEntity)
+		relationship.TargetEntity = strings.ToUpper(relationship.TargetEntity)
+		relationKey := fmt.Sprintf("%s-%s", relationship.SourceEntity, relationship.TargetEntity)
+		if _, ok := rels[relationKey]; !ok {
+			rels[relationKey] = make([]GraphRelationship, 0)
+		}
+		rels[relationKey] = append(rels[relationKey], relationship)
+	}
 
-func normalizeLLMResultField(s string) string {
-	// Trim whitespace
-	result := strings.TrimSpace(s)
-
-	// Trim leading and trailing double quotes
-	result = strings.TrimPrefix(result, "\"")
-	result = strings.TrimSuffix(result, "\"")
-
-	// Remove control characters in ranges 0x00-0x1F and 0x7F-0x9F
-	re := regexp.MustCompile(`[\x00-\x1f\x7f-\x9f]`)
-	return re.ReplaceAllString(result, "")
+	return ents, rels
 }
 
 func mergeGraphEntities(
@@ -403,10 +344,10 @@ func mergeGraphEntities(
 	} else {
 		existingTypes = append(existingTypes, existingEntity.Type)
 
-		arrDescriptions := strings.Split(existingEntity.Descriptions, graphFieldSeparator)
+		arrDescriptions := strings.Split(existingEntity.Descriptions, GraphFieldSeparator)
 		existingDescriptions = append(existingDescriptions, arrDescriptions...)
 
-		arrSourceIDs := strings.Split(existingEntity.SourceIDs, graphFieldSeparator)
+		arrSourceIDs := strings.Split(existingEntity.SourceIDs, GraphFieldSeparator)
 		existingSourceIDs = append(existingSourceIDs, arrSourceIDs...)
 	}
 
@@ -417,7 +358,7 @@ func mergeGraphEntities(
 	existingSourceIDs = appendIfUnique(existingSourceIDs, sourceID)
 
 	entityType := mostFrequentItem(existingTypes)
-	sourceIDs := strings.Join(existingSourceIDs, graphFieldSeparator)
+	sourceIDs := strings.Join(existingSourceIDs, GraphFieldSeparator)
 	description, err := descriptionsSummary(name, language, summariesMaxToken, existingDescriptions, llm)
 	if err != nil {
 		return fmt.Errorf("failed to summarize descriptions: %w", err)
@@ -469,20 +410,21 @@ func mergeGraphRelationships(
 	} else {
 		existingWeight += existingRelationship.Weight
 
-		arrDescriptions := strings.Split(existingRelationship.Descriptions, graphFieldSeparator)
+		arrDescriptions := strings.Split(existingRelationship.Descriptions, GraphFieldSeparator)
 		existingDescriptions = append(existingDescriptions, arrDescriptions...)
 
-		arrKeywords := strings.Split(existingRelationship.Keywords, graphFieldSeparator)
-		existingKeywords = append(existingKeywords, arrKeywords...)
+		existingKeywords = append(existingKeywords, existingRelationship.Keywords...)
 
-		arrSourceIDs := strings.Split(existingRelationship.SourceIDs, graphFieldSeparator)
+		arrSourceIDs := strings.Split(existingRelationship.SourceIDs, GraphFieldSeparator)
 		existingSourceIDs = append(existingSourceIDs, arrSourceIDs...)
 	}
 
 	for _, relationship := range relationships {
 		existingWeight += relationship.Weight
 		existingDescriptions = appendIfUnique(existingDescriptions, relationship.Descriptions)
-		existingKeywords = appendIfUnique(existingKeywords, relationship.Keywords)
+		for _, keyword := range relationship.Keywords {
+			existingKeywords = appendIfUnique(existingKeywords, keyword)
+		}
 	}
 	existingSourceIDs = appendIfUnique(existingSourceIDs, sourceID)
 
@@ -490,8 +432,7 @@ func mergeGraphRelationships(
 	if err != nil {
 		return fmt.Errorf("failed to summarize descriptions: %w", err)
 	}
-	keywords := strings.Join(existingKeywords, graphFieldSeparator)
-	sourceIDs := strings.Join(existingSourceIDs, graphFieldSeparator)
+	sourceIDs := strings.Join(existingSourceIDs, GraphFieldSeparator)
 
 	_, err = storage.GraphEntity(sourceEntity)
 	if err != nil {
@@ -533,7 +474,7 @@ func mergeGraphRelationships(
 		TargetEntity: targetEntity,
 		Weight:       existingWeight,
 		Descriptions: description,
-		Keywords:     keywords,
+		Keywords:     existingKeywords,
 		SourceIDs:    sourceIDs,
 		CreatedAt:    time.Now(),
 	}
@@ -542,7 +483,8 @@ func mergeGraphRelationships(
 		return fmt.Errorf("failed to upsert graph relationship: %w", err)
 	}
 
-	content := rel.Keywords + rel.SourceEntity + rel.TargetEntity + rel.Descriptions
+	keywords := strings.Join(rel.Keywords, GraphFieldSeparator)
+	content := keywords + rel.SourceEntity + rel.TargetEntity + rel.Descriptions
 	if err := storage.VectorUpsertRelationship(rel.SourceEntity, rel.TargetEntity, content); err != nil {
 		return fmt.Errorf("failed to upsert relationship vector: %w", err)
 	}
@@ -551,7 +493,7 @@ func mergeGraphRelationships(
 }
 
 func descriptionsSummary(name, language string, maxToken int, descriptions []string, llm LLM) (string, error) {
-	joinedDescriptions := strings.Join(descriptions, graphFieldSeparator)
+	joinedDescriptions := strings.Join(descriptions, GraphFieldSeparator)
 	tokens, err := internal.EncodeStringByTiktoken(joinedDescriptions)
 	if err != nil {
 		return "", fmt.Errorf("failed to encode string: %w", err)

@@ -74,22 +74,40 @@ const extractEntitiesPrompt = `---Goal---
 ---Steps---
 1. Identify all entities. For each identified entity, extract the following information:
 - entity_name: Name of the entity, use same language as input text. If {{.Language}}, capitalized the name.
-- entity_type: One of the following types: [{{range $i, $v := .EntityTypes}}{{if $i}}, {{end}}{{$v}}{{end}}]
+- entity_type: STRICTLY use ONLY one of the exact entity types provided here (no variations, plurals, or additions): [{{range $i, $v := .EntityTypes}}{{if $i}}, {{end}}{{$v}}{{end}}]
 - entity_description: Comprehensive description of the entity's attributes and activities
-Format each entity as ("entity"<|><entity_name><|><entity_type><|><entity_description>)
 
 2. From the entities identified in step 1, identify all pairs of (source_entity, target_entity) that are *clearly related* to each other.
 For each pair of related entities, extract the following information:
 - source_entity: name of the source entity, as identified in step 1
 - target_entity: name of the target entity, as identified in step 1
 - relationship_description: explanation as to why you think the source entity and the target entity are related to each other
-- relationship_strength: a numeric score indicating strength of the relationship between the source entity and target entity
+- relationship_strength: a numeric score indicating strength of the relationship between the source entity and target entity (use a number between 1-10)
 - relationship_keywords: one or more high-level key words that summarize the overarching nature of the relationship, focusing on concepts or themes rather than specific details
-Format each relationship as ("relationship"<|><source_entity><|><target_entity><|><relationship_description><|><relationship_keywords><|><relationship_strength>)
 
-3. Return output in {{.Language}} as a single list of all the entities and relationships identified in steps 1 and 2. Use **##** as the list delimiter.
+3. Extract high-level keywords that summarize the main concepts or themes present in the document.
 
-4. When finished, output <|COMPLETE|>
+4. Format your output as a VALID JSON object with the following structure:
+{
+  "entities": [
+    {
+      "entity_name": string,
+      "entity_type": string (one of the provided entity types ONLY),
+      "entity_description": string
+    }
+  ],
+  "relationships": [
+    {
+      "source_entity": string,
+      "target_entity": string,
+      "relationship_description": string,
+      "relationship_keywords": array of strings,
+      "relationship_strength": number (1-10)
+    }
+  ],
+}
+
+5. The JSON output MUST be valid JSON with no explanation text before or after it. Do not include any markdown formatting like backticks, and do not include any text outside the JSON structure.
 
 ######################
 ---Examples---
@@ -101,12 +119,30 @@ Text:
 {{$example.Text}}
 ################
 Output:
-  {{- range $output := $example.EntitiesOutputs}}
-("entity"<|>"{{$output.Name}}"<|>"{{$output.Type}}"<|>"{{$output.Description}}")##
-  {{- end}}
-  {{- range $output := $example.RelationshipsOutputs}}
-("relationship"<|>"{{$output.SourceEntity}}"<|>"{{$output.TargetEntity}}"<|>"{{$output.Description}}"<|>"{{range $i, $v := $output.Keywords}}{{if $i}}, {{end}}{{$v}}{{end}}"<|>"{{$output.Strength}}")##
-  {{- end}}
+{
+  "entities": [
+    {{- range $j, $output := $example.EntitiesOutputs}}
+    {{if $j}},{{end}}
+    {
+      "entity_name": "{{$output.Name}}",
+      "entity_type": "{{$output.Type}}",
+      "entity_description": "{{$output.Description}}"
+    }
+    {{- end}}
+  ],
+  "relationships": [
+    {{- range $j, $output := $example.RelationshipsOutputs}}
+    {{if $j}},{{end}}
+    {
+      "source_entity": "{{$output.SourceEntity}}",
+      "target_entity": "{{$output.TargetEntity}}",
+      "relationship_description": "{{$output.Description}}",
+      "relationship_keywords": [{{range $k, $v := $output.Keywords}}{{if $k}}, {{end}}"{{$v}}"{{end}}],
+      "relationship_strength": {{$output.Strength}}
+    }
+    {{- end}}
+  ],
+}
 #############################
 {{- end}}
 
@@ -120,32 +156,50 @@ Text:
 Output:`
 
 const gleanEntitiesPrompt = `
-MANY entities and relationships were missed in the last extraction.
+MANY entities and relationships were missed in the last extraction. Please identify additional entities and relationships.
 
 ---Remember Steps---
 
 1. Identify all entities. For each identified entity, extract the following information:
 - entity_name: Name of the entity, use same language as input text. If {{.Language}}, capitalized the name.
-- entity_type: One of the following types: [{{range $i, $v := .EntityTypes}}{{if $i}}, {{end}}{{$v}}{{end}}]
+- entity_type: STRICTLY use ONLY one of the exact entity types provided here (no variations, plurals, or additions): [{{range $i, $v := .EntityTypes}}{{if $i}}, {{end}}{{$v}}{{end}}]
 - entity_description: Comprehensive description of the entity's attributes and activities
-Format each entity as ("entity"<|><entity_name><|><entity_type><|><entity_description>
 
 2. From the entities identified in step 1, identify all pairs of (source_entity, target_entity) that are *clearly related* to each other.
 For each pair of related entities, extract the following information:
 - source_entity: name of the source entity, as identified in step 1
 - target_entity: name of the target entity, as identified in step 1
 - relationship_description: explanation as to why you think the source entity and the target entity are related to each other
-- relationship_strength: a numeric score indicating strength of the relationship between the source entity and target entity
+- relationship_strength: a numeric score indicating strength of the relationship between the source entity and target entity (use a number between 1-10)
 - relationship_keywords: one or more high-level key words that summarize the overarching nature of the relationship, focusing on concepts or themes rather than specific details
-Format each relationship as ("relationship"<|><source_entity><|><target_entity><|><relationship_description><|><relationship_keywords><|><relationship_strength>)
 
-3. Return output in {{.Language}} as a single list of all the entities and relationships identified in steps 1 and 2. Use **##** as the list delimiter.
+3. Extract additional high-level keywords that summarize concepts or themes that may have been missed in the initial extraction.
 
-4. When finished, output <|COMPLETE|>
+4. Format your output as a VALID JSON object with the following structure:
+{
+  "entities": [
+    {
+      "entity_name": string,
+      "entity_type": string (one of the provided entity types ONLY),
+      "entity_description": string
+    }
+  ],
+  "relationships": [
+    {
+      "source_entity": string,
+      "target_entity": string,
+      "relationship_description": string,
+      "relationship_keywords": array of strings,
+      "relationship_strength": number (1-10)
+    }
+  ],
+}
+
+5. The JSON output MUST be valid JSON with no explanation text before or after it. Do not include any markdown formatting like backticks, and do not include any text outside the JSON structure.
 
 ---Output---
 
-Add them below using the same format:`
+Please provide the additional entities and relationships in valid JSON format:`
 
 const gleanDecideContinuePrompt = `
 ---Goal---
@@ -201,12 +255,6 @@ Output:
   "high_level_keywords": [{{range $i, $v := $example.HighLevelKeywords}}{{if $i}}, {{end}}"{{$v}}"{{end}}],
   "low_level_keywords": [{{range $i, $v := $example.LowLevelKeywords}}{{if $i}}, {{end}}"{{$v}}"{{end}}]
 \}
-  {{- range $output := $example.EntitiesOutputs}}
-("entity"<|>"{{$output.Name}}"<|>"{{$output.Type}}"<|>"{{$output.Description}}")##
-  {{- end}}
-  {{- range $output := $example.RelationshipsOutputs}}
-("relationship"<|>"{{$output.SourceEntity}}"<|>"{{$output.TargetEntity}}"<|>"{{$output.Description}}"<|>"{{range $i, $v := $output.Keywords}}{{if $i}}, {{end}}{{$v}}{{end}}"<|>"{{$output.Strength}}")##
-  {{- end}}
 #############################
 {{- end}}
 -Real Data-

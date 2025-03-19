@@ -73,9 +73,9 @@ type Source struct {
 // It contains information about the entity's name, type,
 // descriptions, sources, and creation timestamp.
 type GraphEntity struct {
-	Name         string
-	Type         string
-	Descriptions string
+	Name         string `json:"entity_name"`
+	Type         string `json:"entity_type"`
+	Descriptions string `json:"entity_description"`
 	SourceIDs    string
 	CreatedAt    time.Time
 }
@@ -84,11 +84,11 @@ type GraphEntity struct {
 // It contains information about the source and target entities,
 // relationship weight, descriptions, keywords, sources, and creation timestamp.
 type GraphRelationship struct {
-	SourceEntity string
-	TargetEntity string
-	Weight       float64
-	Descriptions string
-	Keywords     string
+	SourceEntity string   `json:"source_entity"`
+	TargetEntity string   `json:"target_entity"`
+	Weight       float64  `json:"relationship_strength"`
+	Descriptions string   `json:"relationship_description"`
+	Keywords     []string `json:"relationship_keywords"`
 	SourceIDs    string
 	CreatedAt    time.Time
 }
