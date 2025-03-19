@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -139,14 +140,36 @@ func Query(
 	llKeywords := strings.Join(output.LowLevelKeywords, ", ")
 	hlKeywords := strings.Join(output.HighLevelKeywords, ", ")
 
-	localEntities, localRelationships, localSources, err := localContext(llKeywords, storage, logger)
-	if err != nil {
-		return QueryResult{}, fmt.Errorf("failed to get local context: %w", err)
+	// Run local and global context retrieval concurrently
+	var localEntities []EntityContext
+	var localRelationships []RelationshipContext
+	var localSources []SourceContext
+	var globalEntities []EntityContext
+	var globalRelationships []RelationshipContext
+	var globalSources []SourceContext
+	var localErr, globalErr error
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		localEntities, localRelationships, localSources, localErr = localContext(llKeywords, storage, logger)
+	}()
+
+	go func() {
+		defer wg.Done()
+		globalEntities, globalRelationships, globalSources, globalErr = globalContext(hlKeywords, storage, logger)
+	}()
+
+	wg.Wait()
+
+	if localErr != nil {
+		return QueryResult{}, fmt.Errorf("failed to get local context: %w", localErr)
 	}
 
-	globalEntities, globalRelationships, globalSources, err := globalContext(hlKeywords, storage, logger)
-	if err != nil {
-		return QueryResult{}, fmt.Errorf("failed to get global context: %w", err)
+	if globalErr != nil {
+		return QueryResult{}, fmt.Errorf("failed to get global context: %w", globalErr)
 	}
 
 	return QueryResult{
@@ -415,6 +438,7 @@ func relationshipsRankedEntities(relationships []GraphRelationship, storage Stor
 			Type:        entity.Type,
 			Description: entity.Descriptions,
 			RefCount:    degree,
+			CreatedAt:   entity.CreatedAt,
 		})
 	}
 
