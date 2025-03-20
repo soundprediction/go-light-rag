@@ -255,6 +255,11 @@ func insert(
 	llm golightrag.LLM,
 	logger *slog.Logger,
 ) error {
+	now := time.Now()
+	defer func() {
+		logger.Info("Inserted document", "duration in milliseconds", time.Since(now).Milliseconds())
+	}()
+
 	doc := golightrag.Document{
 		ID:      "book",
 		Content: docContent,

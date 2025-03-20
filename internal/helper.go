@@ -32,3 +32,13 @@ func DecodeTokensByTiktoken(tokenIDs []uint) (string, error) {
 
 	return enc.Decode(tokenIDs)
 }
+
+// CountTokens counts the number of tokens in a string using the GPT-4o tokenizer.
+// It takes a string input and returns the token count and an error if tokenization fails.
+func CountTokens(code string) (int, error) {
+	tokenIDs, err := EncodeStringByTiktoken(code)
+	if err != nil {
+		return 0, fmt.Errorf("failed to encode string: %w", err)
+	}
+	return len(tokenIDs), nil
+}

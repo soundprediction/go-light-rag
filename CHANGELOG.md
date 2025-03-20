@@ -15,5 +15,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `Neo4J` struct to interact with Neo4j graph database.
 - Add `Chromem` struct to interact with `chromem-go` vector database.
 - Add `Bolt` struct to interact with `bbolt` key-value database.
-- Add `Default` struct to be used by Query and Insert.
 - Add `Anthropic`, `Ollama`, `OpenAI`, and `OpenRouter` to implement `LLM` interface.
+- Add `Default` struct to handle a standard text document.
+- Add `Go` struct to handle Go source code.

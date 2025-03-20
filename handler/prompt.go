@@ -252,3 +252,454 @@ var defaultKeywordExtractionExamples = []golightrag.KeywordExtractionPromptExamp
 		HighLevelKeywords: []string{"Education", "Poverty reduction", "Socioeconomic development"},
 	},
 }
+
+const goEntityExtractionGoal = `
+Given a Go code document that is potentially relevant to this activity and a list of entity types, identify all entities of those types from the code and all relationships among the identified entities. 
+
+Note that each code chunk will contain exactly one primary entity (a function, struct, interface, method, etc.) along with its package declaration for context. The chunk may reference other entities that are defined elsewhere in the codebase. Pay special attention to:
+
+- The package declaration that always appears at the top of each chunk
+- Documentation comments that describe entity purpose and behavior
+- References to other entities that may be defined in other chunks (e.g., global variables, constants, types, functions)
+- Method receivers that indicate a relationship with a struct or interface
+- Imported packages and their usage
+- Implicit relationships through variable usage, function calls, or type references
+
+For referenced identifiers where you cannot determine if they are constants or variables:
+- Extract them as both "const" AND "variable" entity types
+- In the description, note that this entity is referenced but not defined in the current chunk
+- The ambiguity will be resolved when analyzing the chunk where the entity is defined
+
+Extract both the defined entity in the chunk and any referenced entities, even if you only see their usage and not their definition. Identify all relationships between entities, including those that span across different code chunks.`
+
+const goKeywordExtractionGoal = `
+Given queries and conversation history related to Go codebases, extract both high-level and low-level keywords that would be relevant for finding appropriate code chunks in a RAG system.
+
+High-level keywords should focus on architectural concepts, patterns, and design principles specific to the codebase being queried.
+
+Low-level keywords should focus on specific package names, type names, function names, method names, and implementation details that would help locate the precise code chunks relevant to the query.
+
+The keywords should help retrieve the most contextually appropriate code chunks from the codebase to answer specific questions about implementation details, usage patterns, or architectural decisions.`
+
+var goEntityTypes = []string{"package", "function", "method", "struct", "interface", "const", "variable", "import"}
+
+var goEntityExtractionExamples = []golightrag.EntityExtractionPromptExample{
+	{
+		EntityTypes: goEntityTypes,
+		Text: `package calculator
+
+import (
+	"fmt"
+	"math"
+)`,
+		EntitiesOutputs: []golightrag.EntityExtractionPromptEntityOutput{
+			{
+				Name:        "calculator",
+				Type:        "package",
+				Description: "A package that provides calculator functionality",
+			},
+			{
+				Name:        "fmt",
+				Type:        "import",
+				Description: "An imported package for formatted I/O operations",
+			},
+			{
+				Name:        "math",
+				Type:        "import",
+				Description: "An imported package for mathematical operations and constants",
+			},
+		},
+		RelationshipsOutputs: []golightrag.EntityExtractionPromptRelationshipOutput{
+			{
+				SourceEntity: "calculator",
+				TargetEntity: "fmt",
+				Description:  "The calculator package imports the fmt package",
+				Keywords:     []string{"import dependency", "package relationship"},
+				Strength:     7,
+			},
+			{
+				SourceEntity: "calculator",
+				TargetEntity: "math",
+				Description:  "The calculator package imports the math package",
+				Keywords:     []string{"import dependency", "package relationship"},
+				Strength:     7,
+			},
+		},
+	},
+	{
+		EntityTypes: goEntityTypes,
+		Text: `package calculator
+
+// Calculator represents a simple calculator with memory
+type Calculator struct {
+	Memory float64
+}`,
+		EntitiesOutputs: []golightrag.EntityExtractionPromptEntityOutput{
+			{
+				Name:        "calculator",
+				Type:        "package",
+				Description: "A package that provides calculator functionality",
+			},
+			{
+				Name:        "Calculator",
+				Type:        "struct",
+				Description: "A struct representing a calculator with memory storage capability",
+			},
+			{
+				Name:        "Memory",
+				Type:        "variable",
+				Description: "A field in the Calculator struct that stores a float64 value",
+			},
+		},
+		RelationshipsOutputs: []golightrag.EntityExtractionPromptRelationshipOutput{
+			{
+				SourceEntity: "Calculator",
+				TargetEntity: "calculator",
+				Description:  "Calculator struct is defined in the calculator package",
+				Keywords:     []string{"struct definition", "package member"},
+				Strength:     9,
+			},
+			{
+				SourceEntity: "Memory",
+				TargetEntity: "Calculator",
+				Description:  "Memory is a field within the Calculator struct",
+				Keywords:     []string{"struct field", "data storage"},
+				Strength:     10,
+			},
+		},
+	},
+	{
+		EntityTypes: goEntityTypes,
+		Text: `package calculator
+
+// Add adds two numbers and returns the result
+func Add(a, b float64) float64 {
+	return a + b
+}`,
+		EntitiesOutputs: []golightrag.EntityExtractionPromptEntityOutput{
+			{
+				Name:        "calculator",
+				Type:        "package",
+				Description: "A package that provides calculator functionality",
+			},
+			{
+				Name:        "Add",
+				Type:        "function",
+				Description: "A function that takes two float64 parameters and returns their sum",
+			},
+		},
+		RelationshipsOutputs: []golightrag.EntityExtractionPromptRelationshipOutput{
+			{
+				SourceEntity: "Add",
+				TargetEntity: "calculator",
+				Description:  "Add function is defined in the calculator package",
+				Keywords:     []string{"function definition", "package member"},
+				Strength:     9,
+			},
+		},
+	},
+	{
+		EntityTypes: goEntityTypes,
+		Text: `package calculator
+
+// SaveToMemory stores a result in the calculator's memory
+func (c *Calculator) SaveToMemory(value float64) {
+	c.Memory = value
+}`,
+		EntitiesOutputs: []golightrag.EntityExtractionPromptEntityOutput{
+			{
+				Name:        "calculator",
+				Type:        "package",
+				Description: "A package that provides calculator functionality",
+			},
+			{
+				Name:        "SaveToMemory",
+				Type:        "method",
+				Description: "A method on Calculator that stores a value in the calculator's memory",
+			},
+		},
+		RelationshipsOutputs: []golightrag.EntityExtractionPromptRelationshipOutput{
+			{
+				SourceEntity: "SaveToMemory",
+				TargetEntity: "calculator",
+				Description:  "SaveToMemory method is defined in the calculator package",
+				Keywords:     []string{"method definition", "package member"},
+				Strength:     8,
+			},
+			{
+				SourceEntity: "SaveToMemory",
+				TargetEntity: "Calculator",
+				Description:  "SaveToMemory is a method on the Calculator struct that modifies its state",
+				Keywords:     []string{"method implementation", "state modification"},
+				Strength:     10,
+			},
+		},
+	},
+	{
+		EntityTypes: goEntityTypes,
+		Text: `package shapes
+
+// Shape defines methods that all shapes must implement
+type Shape interface {
+	Area() float64
+	Perimeter() float64
+}`,
+		EntitiesOutputs: []golightrag.EntityExtractionPromptEntityOutput{
+			{
+				Name:        "shapes",
+				Type:        "package",
+				Description: "A package containing shape-related types and calculations",
+			},
+			{
+				Name:        "Shape",
+				Type:        "interface",
+				Description: "An interface that defines methods all shapes must implement",
+			},
+			{
+				Name:        "Area",
+				Type:        "method",
+				Description: "A method signature required by the Shape interface",
+			},
+			{
+				Name:        "Perimeter",
+				Type:        "method",
+				Description: "A method signature required by the Shape interface",
+			},
+		},
+		RelationshipsOutputs: []golightrag.EntityExtractionPromptRelationshipOutput{
+			{
+				SourceEntity: "Shape",
+				TargetEntity: "shapes",
+				Description:  "Shape interface is defined in the shapes package",
+				Keywords:     []string{"interface definition", "package member"},
+				Strength:     9,
+			},
+			{
+				SourceEntity: "Area",
+				TargetEntity: "Shape",
+				Description:  "Area is a method required by the Shape interface",
+				Keywords:     []string{"interface method", "contract requirement"},
+				Strength:     10,
+			},
+			{
+				SourceEntity: "Perimeter",
+				TargetEntity: "Shape",
+				Description:  "Perimeter is a method required by the Shape interface",
+				Keywords:     []string{"interface method", "contract requirement"},
+				Strength:     10,
+			},
+		},
+	},
+	{
+		EntityTypes: goEntityTypes,
+		Text: `package config
+
+import "time"
+
+// Default timeout values for application
+const (
+	DefaultTimeout = 30 * time.Second
+	MaxRetries     = 3
+)`,
+		EntitiesOutputs: []golightrag.EntityExtractionPromptEntityOutput{
+			{
+				Name:        "config",
+				Type:        "package",
+				Description: "A package providing configuration functionality for an application",
+			},
+			{
+				Name:        "DefaultTimeout",
+				Type:        "const",
+				Description: "A constant defining the default timeout duration for the application",
+			},
+			{
+				Name:        "MaxRetries",
+				Type:        "const",
+				Description: "A constant defining the maximum number of retry attempts",
+			},
+		},
+		RelationshipsOutputs: []golightrag.EntityExtractionPromptRelationshipOutput{
+			{
+				SourceEntity: "DefaultTimeout",
+				TargetEntity: "config",
+				Description:  "DefaultTimeout constant is defined in the config package",
+				Keywords:     []string{"constant definition", "package member"},
+				Strength:     8,
+			},
+			{
+				SourceEntity: "MaxRetries",
+				TargetEntity: "config",
+				Description:  "MaxRetries constant is defined in the config package",
+				Keywords:     []string{"constant definition", "package member"},
+				Strength:     8,
+			},
+		},
+	},
+	{
+		EntityTypes: goEntityTypes,
+		Text: `package handler
+
+// EntityExtractionPromptData returns the data needed to generate prompts for extracting
+// entities and relationships from text content.
+func (d Default) EntityExtractionPromptData() golightrag.EntityExtractionPromptData {
+    language := d.Language
+    if language == "" {
+        language = defaultLanguage
+    }
+    examples := d.EntityExtractionExamples
+    if examples == nil {
+        examples = defaultEntityExtractionExamples
+    }
+    return golightrag.EntityExtractionPromptData{
+        Goal:        goEntityExtractionGoal,
+        EntityTypes: goEntityTypes,
+        Language:    language,
+        Examples:    examples,
+    }
+}`,
+		EntitiesOutputs: []golightrag.EntityExtractionPromptEntityOutput{
+			{
+				Name:        "handler",
+				Type:        "package",
+				Description: "A package providing handler functionality for RAG operations",
+			},
+			{
+				Name:        "EntityExtractionPromptData",
+				Type:        "method",
+				Description: "A method on Default struct that returns data needed for entity extraction prompts",
+			},
+			{
+				Name:        "Default",
+				Type:        "struct",
+				Description: "A struct that this method belongs to, defined elsewhere in the codebase",
+			},
+			{
+				Name:        "defaultLanguage",
+				Type:        "const",
+				Description: "A constant containing the default language setting, referenced but not defined in this chunk",
+			},
+			{
+				Name:        "defaultLanguage",
+				Type:        "variable",
+				Description: "A variable containing the default language setting, referenced but not defined in this chunk",
+			},
+			{
+				Name:        "defaultEntityExtractionExamples",
+				Type:        "const",
+				Description: "A constant containing default examples for entity extraction, referenced but not defined in this chunk",
+			},
+			{
+				Name:        "defaultEntityExtractionExamples",
+				Type:        "variable",
+				Description: "A variable containing default examples for entity extraction, referenced but not defined in this chunk",
+			},
+			{
+				Name:        "goEntityExtractionGoal",
+				Type:        "const",
+				Description: "A constant containing the goal statement for Go entity extraction, referenced but not defined in this chunk",
+			},
+			{
+				Name:        "goEntityExtractionGoal",
+				Type:        "variable",
+				Description: "A variable containing the goal statement for Go entity extraction, referenced but not defined in this chunk",
+			},
+			{
+				Name:        "goEntityTypes",
+				Type:        "const",
+				Description: "A constant containing entity types for Go code analysis, referenced but not defined in this chunk",
+			},
+			{
+				Name:        "goEntityTypes",
+				Type:        "variable",
+				Description: "A variable containing entity types for Go code analysis, referenced but not defined in this chunk",
+			},
+		},
+		RelationshipsOutputs: []golightrag.EntityExtractionPromptRelationshipOutput{
+			{
+				SourceEntity: "EntityExtractionPromptData",
+				TargetEntity: "handler",
+				Description:  "EntityExtractionPromptData method is defined in the handler package",
+				Keywords:     []string{"method definition", "package member"},
+				Strength:     8,
+			},
+			{
+				SourceEntity: "EntityExtractionPromptData",
+				TargetEntity: "Default",
+				Description:  "EntityExtractionPromptData is a method on the Default struct",
+				Keywords:     []string{"method receiver", "struct method"},
+				Strength:     10,
+			},
+			{
+				SourceEntity: "EntityExtractionPromptData",
+				TargetEntity: "defaultLanguage",
+				Description:  "EntityExtractionPromptData references defaultLanguage as a fallback value",
+				Keywords:     []string{"variable usage", "default value"},
+				Strength:     7,
+			},
+			{
+				SourceEntity: "EntityExtractionPromptData",
+				TargetEntity: "defaultEntityExtractionExamples",
+				Description:  "EntityExtractionPromptData references defaultEntityExtractionExamples as a fallback value",
+				Keywords:     []string{"variable usage", "default value"},
+				Strength:     7,
+			},
+			{
+				SourceEntity: "EntityExtractionPromptData",
+				TargetEntity: "goEntityExtractionGoal",
+				Description:  "EntityExtractionPromptData uses goEntityExtractionGoal in the returned data structure",
+				Keywords:     []string{"variable usage", "return value"},
+				Strength:     9,
+			},
+			{
+				SourceEntity: "EntityExtractionPromptData",
+				TargetEntity: "goEntityTypes",
+				Description:  "EntityExtractionPromptData uses goEntityTypes in the returned data structure",
+				Keywords:     []string{"variable usage", "return value"},
+				Strength:     9,
+			},
+		},
+	},
+}
+
+var goKeywordExtractionExamples = []golightrag.KeywordExtractionPromptExample{
+	{
+		Query:             "How does the SSEClient maintain connection with the server and handle reconnection?",
+		LowLevelKeywords:  []string{"SSEClient", "Reconnect", "ConnectWithRetry", "EventSource", "readLoop", "LastEventID", "backoff", "http.Client"},
+		HighLevelKeywords: []string{"connection maintenance", "retry logic", "event streaming", "persistent connections"},
+	},
+	{
+		Query:             "What's the event delivery guarantee mechanism in the SSE server implementation?",
+		LowLevelKeywords:  []string{"SSEServer", "Broadcast", "Subscribe", "eventStore", "EventID", "clientConnections", "mutex", "channel"},
+		HighLevelKeywords: []string{"message delivery", "event buffering", "concurrency control", "broadcast pattern"},
+	},
+	{
+		Query:             "How does the transaction isolation work in this key-value database?",
+		LowLevelKeywords:  []string{"DB.Begin", "Tx", "Commit", "Rollback", "writable", "rwlock", "meta", "page", "mmap"},
+		HighLevelKeywords: []string{"transaction isolation", "MVCC", "B+tree", "durability guarantees"},
+	},
+	{
+		Query:             "What's the bucket structure for organizing data in the key-value store?",
+		LowLevelKeywords:  []string{"Bucket", "CreateBucket", "CreateBucketIfNotExists", "NextSequence", "Cursor", "bucket.Put", "bucket.Get", "nested buckets"},
+		HighLevelKeywords: []string{"data organization", "key hierarchy", "bucket pattern", "namespaces"},
+	},
+	{
+		Query:             "How does middleware chaining work in this HTTP framework?",
+		LowLevelKeywords:  []string{"gin.HandlerFunc", "gin.Engine", "RouterGroup", "Use", "Next", "Abort", "c.Request", "c.Writer"},
+		HighLevelKeywords: []string{"middleware chain", "request pipeline", "context propagation", "handler composition"},
+	},
+	{
+		Query:             "What's the best way to implement custom validation for request parameters?",
+		LowLevelKeywords:  []string{"validator", "ShouldBindJSON", "ShouldBindQuery", "BindJSON", "binding.Validator", "gin.Context", "validation.RegisterValidation"},
+		HighLevelKeywords: []string{"request validation", "custom validators", "binding middleware", "input sanitization"},
+	},
+	{
+		Query:             "How does the controller reconciliation loop handle errors in Kubernetes?",
+		LowLevelKeywords:  []string{"Reconcile", "controller.Result", "requeueAfter", "client.Get", "client.Update", "apierrors.IsNotFound", "ctrl.Log", "manager.GetClient"},
+		HighLevelKeywords: []string{"reconciliation pattern", "error handling", "control loop", "eventual consistency"},
+	},
+	{
+		Query:             "What's the mechanism for leader election in Kubernetes controllers?",
+		LowLevelKeywords:  []string{"leaderelection", "resourcelock", "LeaseLock", "LeaderElectionConfig", "OnStartedLeading", "OnStoppedLeading", "NewLeaderElector", "LeaseDurationSeconds"},
+		HighLevelKeywords: []string{"leader election", "distributed coordination", "controller redundancy", "high availability"},
+	},
+}
