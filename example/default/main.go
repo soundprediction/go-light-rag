@@ -5,10 +5,10 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"html/template"
 	"log/slog"
 	"os"
 	"strings"
+	"text/template"
 	"time"
 
 	golightrag "github.com/MegaGrindStone/go-light-rag"

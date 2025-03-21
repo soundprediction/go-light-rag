@@ -124,7 +124,7 @@ func (c Chromem) VectorUpsertRelationship(source, target, content string) error 
 		},
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
 
 	return c.RelationshipsColl.AddDocument(ctx, doc)

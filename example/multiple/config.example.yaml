@@ -1,0 +1,24 @@
+# Neo4J Configuration
+neo4j_uri: "bolt://localhost:7687"
+neo4j_user: "neo4j"
+neo4j_password: "password"
+
+# OpenAI Configuration
+openai_api_key: "your-openai-api-key-here"
+openai_model: "gpt-4o-mini"
+
+# Logging Configuration
+log_level: "info"  # Options: debug, info, warn, error
+
+# Documents Configuration
+docs_dir: "./documents"  # Directory containing knowledge base documents
+
+# Entity Types For Default Handler Configuration
+defaultEntityTypes:
+  - "character"
+  - "organization"
+  - "location"
+  - "time period"
+  - "object"
+  - "theme"
+  - "event"
