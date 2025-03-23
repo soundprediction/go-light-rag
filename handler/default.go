@@ -39,8 +39,8 @@ type DocumentConfig struct {
 }
 
 const (
-	defaultChunkMaxTokenSize       = 1200
-	defaultChunkOverlapTokenSize   = 100
+	defaultChunkMaxTokenSize       = 1024
+	defaultChunkOverlapTokenSize   = 128
 	defaultLanguage                = "English"
 	defaultMaxSummariesTokenLength = 1200
 	defaultBackoffDuration         = 1 * time.Second

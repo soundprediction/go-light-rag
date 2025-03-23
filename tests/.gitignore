@@ -1,0 +1,6 @@
+docs
+config.yaml
+vec.db
+kv.db
+naive_vec.db
+naive_kv.db
