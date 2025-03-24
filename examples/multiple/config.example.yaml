@@ -15,10 +15,13 @@ docs_dir: "./documents"  # Directory containing knowledge base documents
 
 # Entity Types For Default Handler Configuration
 defaultEntityTypes:
-  - "character"
-  - "organization"
-  - "location"
-  - "time period"
-  - "object"
-  - "theme"
-  - "event"
+  - "config"
+  - "dependency"
+  - "reference"
+  - "directive"
+  - "metadata"
+  - "resource"
+  - "parameter"
+  - "schema"
+  - "environment"
+  - "command"
