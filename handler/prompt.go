@@ -703,3 +703,127 @@ var goKeywordExtractionExamples = []golightrag.KeywordExtractionPromptExample{
 		HighLevelKeywords: []string{"leader election", "distributed coordination", "controller redundancy", "high availability"},
 	},
 }
+
+const semanticChunkingPrompt = `---Goal---
+Analyze the given text and divide it into semantically coherent sections based on thematic shifts, logical structure, or natural section boundaries.
+
+---Instructions---
+1. Carefully read and understand the entire text.
+2. Identify natural semantic boundaries where the topic, focus, or theme shifts.
+3. Divide the text into non-overlapping sections at these boundaries.
+4. For each section, provide:
+   - section_summary: A brief summary of the section's content (2-3 sentences)
+   - start_position: The position in the text where this section begins (use character index, starting from 0)
+   - end_position: The position in the text where this section ends (use character index)
+
+5. Format your output as a VALID JSON object with the following structure:
+{
+  "sections": [
+    {
+      "section_summary": string,
+      "start_position": number,
+      "end_position": number
+    }
+  ]
+}
+
+6. The JSON output MUST be valid JSON with no explanation text before or after it. Do not include any markdown formatting like backticks, and do not include any text outside the JSON structure.
+
+######################
+---Examples---
+######################
+Example 1:
+
+Text:
+The history of computing spans thousands of years. Early computing tools included the abacus and mechanical calculators. The first electronic computers were created in the 1940s, with ENIAC being one of the earliest general-purpose computers. The development of the transistor in the 1950s led to smaller, more reliable computers. In the 1960s and 1970s, mainframe computers dominated the industry, with companies like IBM leading the way. The personal computer revolution began in the late 1970s with the introduction of microcomputers like the Apple II and later the IBM PC. The 1990s saw the rise of the internet and the World Wide Web, transforming how people use computers and access information. The 21st century has been characterized by mobile computing, cloud services, and advances in artificial intelligence.
+
+################
+Output:
+{
+  "sections": [
+    {
+      "section_summary": "Early computing history, from ancient calculation tools to the first electronic computers of the 1940s.",
+      "start_position": 0,
+      "end_position": 180
+    },
+    {
+      "section_summary": "Development of computing from the 1950s through the 1970s, focusing on transistors and mainframe computers.",
+      "start_position": 181,
+      "end_position": 342
+    },
+    {
+      "section_summary": "The personal computer revolution beginning in the late 1970s.",
+      "start_position": 343,
+      "end_position": 467
+    },
+    {
+      "section_summary": "The internet era of the 1990s and the modern computing landscape of the 21st century.",
+      "start_position": 468,
+      "end_position": 646
+    }
+  ]
+}
+
+Example 2:
+
+Text:
+# Introduction to Python
+
+Python is a high-level, interpreted programming language known for its readability and simplicity. It was created by Guido van Rossum and first released in 1991.
+
+## Key Features
+
+Python's design philosophy emphasizes code readability with its notable use of significant whitespace. Its language constructs and object-oriented approach aim to help programmers write clear, logical code for small and large-scale projects.
+
+Python is dynamically typed and garbage-collected. It supports multiple programming paradigms, including structured (particularly, procedural), object-oriented, and functional programming.
+
+## Applications
+
+Python is widely used in many different fields, such as:
+
+- Web development (with frameworks like Django and Flask)
+- Data analysis and visualization (with libraries like pandas and matplotlib)
+- Machine learning and artificial intelligence (with libraries like TensorFlow and PyTorch)
+- Scientific computing (with libraries like NumPy and SciPy)
+- Automation and scripting
+
+## Getting Started
+
+To get started with Python, you'll need to install the Python interpreter on your computer. You can download it from the official website: https://www.python.org/downloads/
+
+Once installed, you can run Python code interactively in the Python shell or by creating and running .py files.
+
+################
+Output:
+{
+  "sections": [
+    {
+      "section_summary": "Introduction to Python, its creation by Guido van Rossum, and initial release in 1991.",
+      "start_position": 0,
+      "end_position": 135
+    },
+    {
+      "section_summary": "Key features of Python including its design philosophy, typing system, and supported programming paradigms.",
+      "start_position": 136,
+      "end_position": 412
+    },
+    {
+      "section_summary": "Various applications and fields where Python is commonly used, including web development, data analysis, machine learning, scientific computing, and automation.",
+      "start_position": 413,
+      "end_position": 701
+    },
+    {
+      "section_summary": "Instructions for getting started with Python, including installation and running Python code.",
+      "start_position": 702,
+      "end_position": 901
+    }
+  ]
+}
+
+#############################
+---Real Data---
+######################
+Text:
+{{.Content}}
+######################
+Output:`
