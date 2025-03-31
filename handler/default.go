@@ -2,7 +2,6 @@ package handler
 
 import (
 	"fmt"
-	"math"
 	"strings"
 	"time"
 
@@ -52,6 +51,10 @@ const (
 // Each Source contains a portion of the original text with appropriate metadata.
 // It returns an error if encoding or decoding fails.
 func (d Default) ChunksDocument(content string) ([]golightrag.Source, error) {
+	if content == "" {
+		return []golightrag.Source{}, nil
+	}
+
 	tokenIDs, err := internal.EncodeStringByTiktoken(content)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode string: %w", err)
@@ -75,9 +78,16 @@ func (d Default) ChunksDocument(content string) ([]golightrag.Source, error) {
 			return nil, fmt.Errorf("failed to decode tokens: %w", err)
 		}
 
+		trimmedContent := strings.TrimSpace(chunkContent)
+
+		tokenCount, err := internal.CountTokens(trimmedContent)
+		if err != nil {
+			return nil, fmt.Errorf("failed to count tokens: %w", err)
+		}
+
 		results = append(results, golightrag.Source{
-			Content:    strings.TrimSpace(chunkContent),
-			TokenSize:  int(math.Min(float64(maxTokenSize), float64(len(tokenIDs)-start))),
+			Content:    trimmedContent,
+			TokenSize:  tokenCount,
 			OrderIndex: index,
 		})
 	}

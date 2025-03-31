@@ -170,8 +170,14 @@ func (s Semantic) semanticChunk(content string) ([]golightrag.Source, error) {
 
 		// Apply max chunk size if specified
 		if s.MaxChunkSize > 0 && tokenCount > s.MaxChunkSize {
+			// Create a temporary Default handler with appropriate settings based on MaxChunkSize
+			tempDefault := Default{
+				ChunkMaxTokenSize:     s.MaxChunkSize,
+				ChunkOverlapTokenSize: min(s.MaxChunkSize/4, 20), // Reasonable overlap that won't exceed MaxChunkSize
+			}
+
 			// If a section is too large, further split it using the Default chunker
-			defaultSources, err := s.Default.ChunksDocument(sectionText)
+			defaultSources, err := tempDefault.ChunksDocument(sectionText)
 			if err != nil {
 				return nil, fmt.Errorf("failed to apply default chunking to large section: %w", err)
 			}
