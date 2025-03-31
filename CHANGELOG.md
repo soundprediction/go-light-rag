@@ -5,16 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.1] - 2025-04-01
+
+This update introduces semantic text chunking capabilities through a new handler and improves code quality with comprehensive tests, while also addressing a concurrency setting issue that could impact processing performance.
 
 ### Added
 
-- Add `Semantic` handler for semantic chunking of text documents.
-- Add unit tests for handler package
+- Add `Semantic` handler that intelligently chunks text documents based on content meaning rather than arbitrary size limits.
+- Add comprehensive unit tests for the handler package to ensure reliability and correctness.
 
 ### Fixed
 
-- Fix `Default` concurrency count default value.
+- Fix incorrect default value in `Default` handler's concurrency count setting that could affect processing performance.
 
 ## [0.1.0] - 2025-03-25
 
