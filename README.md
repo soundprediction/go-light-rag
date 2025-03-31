@@ -59,7 +59,8 @@ Handlers control document and query processing:
 #### Included Handlers
 
 - **Default**: General-purpose text document processing that follows the official Python implementation. Using the zero-value for Default handler will use the same configuration as the Python implementation.
-- **Go**: Specialized handler for Go source code using AST parsing
+- **Semantic**: Advanced handler that extends Default to create semantically meaningful chunks by leveraging LLM to identify natural content boundaries rather than fixed token counts. Improves RAG quality at the cost of additional LLM calls.
+- **Go**: Specialized handler for Go source code using AST parsing to divide code into logical sections like functions, types, and declarations.
 
 Custom handlers can embed existing handlers and override only specific methods.
 
@@ -130,6 +131,7 @@ fmt.Println(result)
 
 1. **Choose the right handler for your documents**:
    - `Default` for general text
+   - `Semantic` for improved content comprehension where cost is less important
    - `Go` for Go source code
    - Create custom handlers for specialized content
 
@@ -137,12 +139,18 @@ fmt.Println(result)
    - Larger chunks provide more context but may exceed token limits
    - Smaller chunks process faster but may lose context
    - Balance overlap to maintain concept continuity
+   - Consider `Semantic` handler for content where natural boundaries are important
 
-3. **Configure concurrency appropriately**:
+3. **When using the Semantic handler**:
+   - Set appropriate `TokenThreshold` based on your LLM context window
+   - Configure `MaxChunkSize` to limit individual chunk sizes
+   - Provide a reliable LLM instance as it's required for semantic analysis
+
+4. **Configure concurrency appropriately**:
    - Higher concurrency speeds up processing but increases resource usage
    - Balance according to your hardware capabilities and LLM rate limits
 
-4. **Customize entity types**:
+5. **Customize entity types**:
    - Define entity types relevant to your domain
    - Be specific enough to capture important concepts
    - Be general enough to avoid excessive fragmentation
