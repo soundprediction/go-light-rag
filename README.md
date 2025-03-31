@@ -1,5 +1,11 @@
 # go-light-rag
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/MegaGrindStone/go-light-rag.svg)](https://pkg.go.dev/github.com/MegaGrindStone/go-light-rag)
+![CI](https://github.com/MegaGrindStone/go-light-rag/actions/workflows/ci.yml/badge.svg)
+[![Go Report Card](https://goreportcard.com/badge/github.com/MegaGrindStone/go-light-rag)](https://goreportcard.com/report/github.com/MegaGrindStone/go-light-rag)
+[![codecov](https://codecov.io/gh/MegaGrindStone/go-light-rag/branch/main/graph/badge.svg)](https://codecov.io/gh/MegaGrindStone/go-light-rag)
+
+
 A Go library implementation of [LightRAG](https://github.com/HKUDS/LightRAG) - an advanced Retrieval-Augmented Generation (RAG) system that uniquely combines vector databases with graph database relationships to enhance knowledge retrieval.
 
 ## Overview
