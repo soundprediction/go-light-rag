@@ -140,6 +140,9 @@ func (d Default) BackoffDuration() time.Duration {
 // ConcurrencyCount returns the number of concurrent requests to the LLM
 // as configured in the DocumentConfig.
 func (d Default) ConcurrencyCount() int {
+	if d.Config.ConcurrencyCount == 0 {
+		return defaultConcurrencyCount
+	}
 	return d.Config.ConcurrencyCount
 }
 
