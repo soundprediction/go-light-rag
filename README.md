@@ -51,7 +51,7 @@ The library defines three storage interfaces:
 
 - GraphStorage: [Neo4j](https://github.com/neo4j/neo4j-go-driver) (and any compatible graph database)
 - VectorStorage: [ChromeM](https://github.com/philippgille/chromem-go)
-- KeyValueStorage: [BoltDB](https://github.com/etcd-io/bbolt)
+- KeyValueStorage: [BoltDB](https://github.com/etcd-io/bbolt), [Redis](https://github.com/redis/go-redis)
 
 You can implement any of these interfaces to use different storage solutions.
 
@@ -82,7 +82,11 @@ llm := llm.NewOpenAI(apiKey, model, params, logger)
 graphDB, _ := storage.NewNeo4J("bolt://localhost:7687", "neo4j", "password")
 embeddingFunc := chromem.NewEmbeddingFuncOpenAI("open_ai_key", chromem.EmbeddingModelOpenAI3Large)
 vecDB, _ := storage.NewChromem("vec.db", 5, embeddingFunc)
+
+// Use BoltDB for key-value storage
 kvDB, _ := storage.NewBolt("kv.db")
+// Or use Redis instead
+// kvDB, _ := storage.NewRedis("localhost:6379", "", 0)
 
 store := storageWrapper{
     Bolt:    kvDB,
