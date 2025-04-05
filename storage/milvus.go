@@ -31,13 +31,12 @@ const (
 
 // NewMilvus creates a new Milvus client with the provided parameters.
 // It returns an initialized Milvus struct and any error encountered during setup.
-func NewMilvus(addr string, topK, vectorDim int, embeddingFunc EmbeddingFunc) (Milvus, error) {
-	ctx := context.Background()
+func NewMilvus(config *milvusclient.ClientConfig, topK, vectorDim int, embeddingFunc EmbeddingFunc) (Milvus, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
 	// Connect to Milvus
-	c, err := milvusclient.New(ctx, &milvusclient.ClientConfig{
-		Address: addr,
-	})
+	c, err := milvusclient.New(ctx, config)
 	if err != nil {
 		return Milvus{}, fmt.Errorf("failed to connect to Milvus: %w", err)
 	}
