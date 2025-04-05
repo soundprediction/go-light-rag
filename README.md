@@ -50,7 +50,7 @@ The library defines three storage interfaces:
 #### Implementations Provided
 
 - GraphStorage: [Neo4j](https://github.com/neo4j/neo4j-go-driver) (and any compatible graph database)
-- VectorStorage: [ChromeM](https://github.com/philippgille/chromem-go)
+- VectorStorage: [ChromeM](https://github.com/philippgille/chromem-go), [Milvus](https://github.com/milvus-io/milvus)
 - KeyValueStorage: [BoltDB](https://github.com/etcd-io/bbolt), [Redis](https://github.com/redis/go-redis)
 
 You can implement any of these interfaces to use different storage solutions.
@@ -80,8 +80,21 @@ llm := llm.NewOpenAI(apiKey, model, params, logger)
 
 // Initialize storage components
 graphDB, _ := storage.NewNeo4J("bolt://localhost:7687", "neo4j", "password")
-embeddingFunc := chromem.NewEmbeddingFuncOpenAI("open_ai_key", chromem.EmbeddingModelOpenAI3Large)
+
+embeddingFunc := storage.EmbeddingFunc(chromem.NewEmbeddingFuncOpenAI("open_ai_key", chromem.EmbeddingModelOpenAI3Large))
+
+// Option 1: Use ChromeM for vector storage
 vecDB, _ := storage.NewChromem("vec.db", 5, embeddingFunc)
+
+// Option 2: Use Milvus for vector storage instead
+// vectorDim := 1536 // Dimension for embeddings (e.g. 1536 for OpenAI)
+// milvusCfg := &milvusclient.ClientConfig{
+// 	Address:  os.Getenv("MILVUS_ADDRESS"),
+// 	Username: os.Getenv("MILVUS_USER"),
+// 	Password: os.Getenv("MILVUS_PASSWORD"),
+// 	DBName:   os.Getenv("MILVUS_DB"),
+// }
+// vecDB, _ := storage.NewMilvus(milvusCfg, 5, vectorDim, embeddingFunc)
 
 // Use BoltDB for key-value storage
 kvDB, _ := storage.NewBolt("kv.db")
@@ -90,7 +103,9 @@ kvDB, _ := storage.NewBolt("kv.db")
 
 store := storageWrapper{
     Bolt:    kvDB,
+    // Redis:   kvDB, // If redis is used, use kvDB from Option 2
     Chromem: vecDB,
+    // Milvus:  vecDB, // If milvus is used, use vecDB from Option 2
     Neo4J:   graphDB,
 }
 
