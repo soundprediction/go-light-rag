@@ -23,17 +23,17 @@ type Chromem struct {
 // It returns an initialized Chromem struct and any error encountered during setup.
 // The dbPath parameter specifies where to persist the database, topK defines the number of
 // results to return in queries, and embeddingFunc provides the vector embedding capability.
-func NewChromem(dbPath string, topK int, embeddingFunc chromem.EmbeddingFunc) (Chromem, error) {
+func NewChromem(dbPath string, topK int, embeddingFunc EmbeddingFunc) (Chromem, error) {
 	db, err := chromem.NewPersistentDB(dbPath, false)
 	if err != nil {
 		return Chromem{}, fmt.Errorf("failed to create chromem db: %w", err)
 	}
 
-	entitiesColl, err := db.GetOrCreateCollection("entities", nil, embeddingFunc)
+	entitiesColl, err := db.GetOrCreateCollection("entities", nil, chromem.EmbeddingFunc(embeddingFunc))
 	if err != nil {
 		return Chromem{}, fmt.Errorf("failed to create entities collection: %w", err)
 	}
-	relationshipsColl, err := db.GetOrCreateCollection("relationships", nil, embeddingFunc)
+	relationshipsColl, err := db.GetOrCreateCollection("relationships", nil, chromem.EmbeddingFunc(embeddingFunc))
 	if err != nil {
 		return Chromem{}, fmt.Errorf("failed to create relationships collection: %w", err)
 	}

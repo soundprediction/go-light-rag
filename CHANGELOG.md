@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Add `Redis` struct for Redis key-value database integration.
+- Add `Milvus` struct for Milvus vector database integration.
 
 ## [0.1.1] - 2025-04-01
 

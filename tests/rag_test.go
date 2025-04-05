@@ -630,7 +630,7 @@ func newLightRAG(cfg *config, llm golightrag.LLM, logger *slog.Logger) (lightRAG
 	}
 
 	vecDB, err := storage.NewChromem("vec.db", 5,
-		chromem.NewEmbeddingFuncOpenAI(cfg.EmbeddingAPIKey, chromem.EmbeddingModelOpenAI3Large))
+		storage.EmbeddingFunc(chromem.NewEmbeddingFuncOpenAI(cfg.EmbeddingAPIKey, chromem.EmbeddingModelOpenAI3Large)))
 	if err != nil {
 		return lightRAG{}, fmt.Errorf("error creating chromemDB: %w", err)
 	}

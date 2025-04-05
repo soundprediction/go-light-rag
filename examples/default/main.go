@@ -115,7 +115,7 @@ func main() {
 	}()
 
 	vecDB, err := storage.NewChromem("vec.db", 5,
-		chromem.NewEmbeddingFuncOpenAI(cfg.OpenAIAPIKey, chromem.EmbeddingModelOpenAI3Large))
+		storage.EmbeddingFunc(chromem.NewEmbeddingFuncOpenAI(cfg.OpenAIAPIKey, chromem.EmbeddingModelOpenAI3Large)))
 	if err != nil {
 		fmt.Printf("Error creating chromemDB: %v\n", err)
 		return
