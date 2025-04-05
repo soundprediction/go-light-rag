@@ -5,12 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.2] - 2023-04-06
+
+This update expands database support with two new integrations: Redis for high-performance key-value operations and Milvus for vector similarity searches, enhancing the framework's flexibility for different data storage and retrieval requirements.
 
 ### Added
 
-- Add `Redis` struct for Redis key-value database integration.
-- Add `Milvus` struct for Milvus vector database integration.
+- Add `Redis` struct enabling integration with Redis key-value database for fast, in-memory data storage and retrieval operations.
+- Add `Milvus` struct for Milvus vector database integration, supporting efficient similarity searches and vector operations.
 
 ## [0.1.1] - 2025-04-01
 
