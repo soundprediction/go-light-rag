@@ -75,6 +75,7 @@ func (m Milvus) VectorQueryEntity(keywords string) ([]string, error) {
 	annParam.WithRadius(cosineThreshold)
 	opt := milvusclient.
 		NewSearchOption(milvusEntitiesCollectionName, m.topK, vectors).
+		WithOutputFields("entity_name").
 		WithAnnParam(annParam)
 	searchResult, err := m.client.Search(ctx, opt)
 	if err != nil {
@@ -114,6 +115,7 @@ func (m Milvus) VectorQueryRelationship(keywords string) ([][2]string, error) {
 	annParam.WithRadius(cosineThreshold)
 	opt := milvusclient.
 		NewSearchOption(milvusRelationshipsCollectionName, m.topK, vectors).
+		WithOutputFields("source_entity", "target_entity").
 		WithAnnParam(annParam)
 	searchResult, err := m.client.Search(ctx, opt)
 	if err != nil {

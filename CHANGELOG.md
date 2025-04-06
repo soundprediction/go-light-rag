@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Fix Milvus search radius parameter by using ann param instead of search param.
+- Fix Milvus search output by declaring the fields.
 
 ## [0.1.2] - 2023-04-06
 
