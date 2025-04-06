@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/milvus-io/milvus/client/v2/entity"
+	"github.com/milvus-io/milvus/client/v2/index"
 	"github.com/milvus-io/milvus/client/v2/milvusclient"
 )
 
@@ -26,7 +27,7 @@ const (
 	milvusEntitiesCollectionName      = "entities"
 	milvusRelationshipsCollectionName = "relationships"
 
-	cosineThreshold = "0.2"
+	cosineThreshold = 0.2
 )
 
 // NewMilvus creates a new Milvus client with the provided parameters.
@@ -70,9 +71,11 @@ func (m Milvus) VectorQueryEntity(keywords string) ([]string, error) {
 	}
 	vectors := []entity.Vector{entity.FloatVector(vector)}
 
+	annParam := index.NewCustomAnnParam()
+	annParam.WithRadius(cosineThreshold)
 	opt := milvusclient.
 		NewSearchOption(milvusEntitiesCollectionName, m.topK, vectors).
-		WithSearchParam("params", cosineThreshold)
+		WithAnnParam(annParam)
 	searchResult, err := m.client.Search(ctx, opt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query entities: %w", err)
@@ -107,9 +110,11 @@ func (m Milvus) VectorQueryRelationship(keywords string) ([][2]string, error) {
 	}
 	vectors := []entity.Vector{entity.FloatVector(vector)}
 
+	annParam := index.NewCustomAnnParam()
+	annParam.WithRadius(cosineThreshold)
 	opt := milvusclient.
 		NewSearchOption(milvusRelationshipsCollectionName, m.topK, vectors).
-		WithSearchParam("params", cosineThreshold)
+		WithAnnParam(annParam)
 	searchResult, err := m.client.Search(ctx, opt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query relationships: %w", err)
