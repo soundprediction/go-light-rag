@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/milvus-io/milvus/client/v2/entity"
 	"github.com/milvus-io/milvus/client/v2/index"
 	"github.com/milvus-io/milvus/client/v2/milvusclient"
@@ -161,7 +160,7 @@ func (m Milvus) VectorUpsertEntity(name, content string) error {
 	}
 
 	opt := milvusclient.NewColumnBasedInsertOption(milvusEntitiesCollectionName).
-		WithVarcharColumn("id", []string{uuid.New().String()}).
+		WithVarcharColumn("id", []string{name}).
 		WithVarcharColumn("entity_name", []string{name}).
 		WithFloatVectorColumn("vector", m.vectorDim, [][]float32{vector})
 	_, err = m.client.Upsert(ctx, opt)
@@ -182,8 +181,9 @@ func (m Milvus) VectorUpsertRelationship(source, target, content string) error {
 		return fmt.Errorf("failed to generate embedding for relationship: %w", err)
 	}
 
+	id := fmt.Sprintf("%s-%s", source, target)
 	opt := milvusclient.NewColumnBasedInsertOption(milvusRelationshipsCollectionName).
-		WithVarcharColumn("id", []string{uuid.New().String()}).
+		WithVarcharColumn("id", []string{id}).
 		WithVarcharColumn("source_entity", []string{source}).
 		WithVarcharColumn("target_entity", []string{target}).
 		WithFloatVectorColumn("vector", m.vectorDim, [][]float32{vector})

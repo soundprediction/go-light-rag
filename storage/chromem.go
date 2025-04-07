@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/philippgille/chromem-go"
 )
 
@@ -99,7 +98,7 @@ func (c Chromem) VectorQueryRelationship(keywords string) ([][2]string, error) {
 // It returns an error if the database operation fails.
 func (c Chromem) VectorUpsertEntity(name, content string) error {
 	doc := chromem.Document{
-		ID:      uuid.New().String(),
+		ID:      name,
 		Content: content,
 		Metadata: map[string]string{
 			"entity_name": name,
@@ -115,8 +114,9 @@ func (c Chromem) VectorUpsertEntity(name, content string) error {
 // VectorUpsertRelationship creates or updates a relationship with vector embedding based on its content.
 // It returns an error if the database operation fails.
 func (c Chromem) VectorUpsertRelationship(source, target, content string) error {
+	id := fmt.Sprintf("%s-%s", source, target)
 	doc := chromem.Document{
-		ID:      uuid.New().String(),
+		ID:      id,
 		Content: content,
 		Metadata: map[string]string{
 			"source_entity": source,

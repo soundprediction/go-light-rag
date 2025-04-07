@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fix Milvus search radius parameter by using ann param instead of search param.
 - Fix Milvus search output by declaring the fields.
+- Fix upsert operations in vector storages, by setting the entity name and relationship id as the key.
 
 ## [0.1.2] - 2023-04-06
 
