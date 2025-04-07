@@ -215,6 +215,7 @@ func (m Milvus) createEntitiesCollection(ctx context.Context) error {
 
 	err = m.client.CreateCollection(ctx,
 		milvusclient.SimpleCreateCollectionOptions(milvusEntitiesCollectionName, int64(m.vectorDim)).
+			WithAutoID(false).
 			WithVarcharPK(true, 64))
 	if err != nil {
 		return fmt.Errorf("failed to create entities collection: %w", err)
@@ -235,6 +236,7 @@ func (m Milvus) createRelationshipsCollection(ctx context.Context) error {
 
 	err = m.client.CreateCollection(ctx,
 		milvusclient.SimpleCreateCollectionOptions(milvusRelationshipsCollectionName, int64(m.vectorDim)).
+			WithAutoID(false).
 			WithVarcharPK(true, 64))
 	if err != nil {
 		return fmt.Errorf("failed to create relationships collection: %w", err)
