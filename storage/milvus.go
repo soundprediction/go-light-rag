@@ -2,7 +2,9 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/milvus-io/milvus/client/v2/entity"
@@ -92,7 +94,16 @@ func (m Milvus) VectorQueryEntity(keywords string) ([]string, error) {
 			if !ok {
 				return nil, fmt.Errorf("entity name not string")
 			}
-			results = append(results, entityNameStr)
+			// Milvus returns strings with surrounding quotes, remove them
+			cleanStr, err := strconv.Unquote(entityNameStr)
+			if err != nil {
+				if !errors.Is(err, strconv.ErrSyntax) {
+					return nil, fmt.Errorf("failed to unquote entity name: %w", err)
+				}
+				// ErrSyntax means the string is not surrounded by quotes, so we can use it as is
+				cleanStr = entityNameStr
+			}
+			results = append(results, cleanStr)
 		}
 	}
 
@@ -132,6 +143,15 @@ func (m Milvus) VectorQueryRelationship(keywords string) ([][2]string, error) {
 			if !ok {
 				return nil, fmt.Errorf("source entity not string")
 			}
+			// Milvus returns strings with surrounding quotes, remove them
+			sourceCleanStr, err := strconv.Unquote(sourceEntityStr)
+			if err != nil {
+				if !errors.Is(err, strconv.ErrSyntax) {
+					return nil, fmt.Errorf("failed to unquote source entity: %w", err)
+				}
+				// ErrSyntax means the string is not surrounded by quotes, so we can use it as is
+				sourceCleanStr = sourceEntityStr
+			}
 
 			targetEntity, err := result.GetColumn("target_entity").Get(i)
 			if err != nil {
@@ -141,8 +161,17 @@ func (m Milvus) VectorQueryRelationship(keywords string) ([][2]string, error) {
 			if !ok {
 				return nil, fmt.Errorf("target entity not string")
 			}
+			// Milvus returns strings with surrounding quotes, remove them
+			targetCleanStr, err := strconv.Unquote(targetEntityStr)
+			if err != nil {
+				if !errors.Is(err, strconv.ErrSyntax) {
+					return nil, fmt.Errorf("failed to unquote target entity: %w", err)
+				}
+				// ErrSyntax means the string is not surrounded by quotes, so we can use it as is
+				targetCleanStr = targetEntityStr
+			}
 
-			results = append(results, [2]string{sourceEntityStr, targetEntityStr})
+			results = append(results, [2]string{sourceCleanStr, targetCleanStr})
 		}
 	}
 
