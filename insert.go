@@ -176,6 +176,21 @@ func extractEntities(
 	return nil
 }
 
+func removeMarkdownBackticks(input string) string {
+	lines := strings.Split(input, "\n")
+
+	// Filter out lines that start with triple backticks
+	var filteredLines []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "```") {
+			filteredLines = append(filteredLines, line)
+		}
+	}
+
+	return strings.Join(filteredLines, "\n")
+}
+
 func llmExtractEntities(
 	content string,
 	data EntityExtractionPromptData,
@@ -229,9 +244,10 @@ func llmExtractEntities(
 			continue
 		}
 
+		sResult := removeMarkdownBackticks(sourceResult)
 		// Parse initial extraction results
 		var sourceParsed llmResult
-		err = json.Unmarshal([]byte(sourceResult), &sourceParsed)
+		err = json.Unmarshal([]byte(sResult), &sourceParsed)
 		if err != nil {
 			nErr := fmt.Errorf("failed to parse llm result: %w", err)
 			retry++
@@ -241,7 +257,7 @@ func llmExtractEntities(
 		results.Entities = append(results.Entities, sourceParsed.Entities...)
 		results.Relationships = append(results.Relationships, sourceParsed.Relationships...)
 
-		histories = append(histories, sourceResult)
+		histories = append(histories, sResult)
 
 		// "Gleaning" process: attempt to extract additional entities that might have been missed
 		gleanCount := 0
@@ -256,10 +272,11 @@ func llmExtractEntities(
 				continue
 			}
 
-			histories = append(histories, gleanResult)
+			gResult := removeMarkdownBackticks(gleanResult)
+			histories = append(histories, gResult)
 
 			var gleanParsed llmResult
-			err = json.Unmarshal([]byte(gleanResult), &gleanParsed)
+			err = json.Unmarshal([]byte(gResult), &gleanParsed)
 			if err != nil {
 				nErr := fmt.Errorf("failed to parse llm result: %w", err)
 				retry++
