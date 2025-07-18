@@ -127,7 +127,7 @@ func Query(
 	logger.Debug("Extracted keywords from LLM", "keywords", keywordRes)
 
 	var output keywordExtractionOutput
-	err = json.Unmarshal([]byte(keywordRes), &output)
+	err = json.Unmarshal([]byte(strings.ReplaceAll(keywordRes, "\\", "")), &output)
 	if err != nil {
 		return QueryResult{}, fmt.Errorf("failed to unmarshal keyword extraction output: %w", err)
 	}
