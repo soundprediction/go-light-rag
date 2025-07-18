@@ -38,7 +38,7 @@ func NewOllama(host, model string, params Parameters, logger *slog.Logger) Ollam
 		host:   host,
 		model:  model,
 		params: params,
-		client: api.NewClient(u, &http.Client{}),
+		client: api.NewClient(u, &http.Client{Timeout: time.Second * 110}),
 		logger: logger.With(slog.String("module", "ollama")),
 	}
 }
@@ -59,7 +59,7 @@ func (o Ollama) Chat(messages []string) (string, error) {
 
 	req := o.chatRequest(msgs)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 110*time.Second)
 	defer cancel()
 
 	var result strings.Builder
