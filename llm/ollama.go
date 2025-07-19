@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/ollama/ollama/api"
@@ -61,16 +62,16 @@ func (o Ollama) Chat(messages []string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	var result string
+	var result strings.Builder
 
 	if err := o.client.Chat(ctx, &req, func(res api.ChatResponse) error {
-		result = res.Message.Content
+		result.WriteString(res.Message.Content)
 		return nil
 	}); err != nil {
 		return "", fmt.Errorf("error sending request: %w", err)
 	}
 
-	return result, nil
+	return result.String(), nil
 }
 
 func (o Ollama) chatRequest(messages []api.Message) api.ChatRequest {
@@ -98,6 +99,9 @@ func (o Ollama) chatRequest(messages []api.Message) api.ChatRequest {
 	}
 	if o.params.MinP != nil {
 		opts["min_p"] = *o.params.MinP
+	}
+	if o.params.IncludeReasoning != nil {
+		req.Think = o.params.IncludeReasoning
 	}
 
 	req.Options = opts
