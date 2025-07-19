@@ -7,6 +7,7 @@ toolchain go1.24.1
 require (
 	github.com/cespare/xxhash v1.1.0
 	github.com/google/uuid v1.6.0
+	github.com/kuzudb/go-kuzu v0.11.0
 	github.com/milvus-io/milvus/client/v2 v2.5.1
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.0
 	github.com/ollama/ollama v0.9.6
@@ -14,6 +15,7 @@ require (
 	github.com/redis/go-redis/v9 v9.7.3
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/sashabaranov/go-openai v1.38.0
+	github.com/stretchr/testify v1.10.0
 	github.com/tiktoken-go/tokenizer v0.6.0
 	go.etcd.io/bbolt v1.4.0
 	golang.org/x/sync v0.16.0
@@ -73,12 +75,12 @@ require (
 	github.com/rogpeppe/go-internal v1.12.0 // indirect
 	github.com/samber/lo v1.27.0 // indirect
 	github.com/shirou/gopsutil/v3 v3.22.9 // indirect
+	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/soheilhy/cmux v0.1.5 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
 	github.com/spf13/pflag v1.0.7 // indirect
-	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/tidwall/gjson v1.17.1 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.0 // indirect
