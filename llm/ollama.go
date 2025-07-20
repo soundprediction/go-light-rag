@@ -82,6 +82,9 @@ func (o Ollama) chatRequest(messages []api.Message) api.ChatRequest {
 
 	opts := make(map[string]any)
 
+	stream := false
+	req.Stream = &stream
+
 	if o.params.Temperature != nil {
 		opts["temperature"] = *o.params.Temperature
 	}
