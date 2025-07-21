@@ -159,7 +159,7 @@ func (k Kuzu) GraphEntity(name string) (golightrag.GraphEntity, error) {
 // GraphRelationship retrieves a relationship between two entities from the Kuzu database.
 func (k Kuzu) GraphRelationship(sourceEntity, targetEntity string) (golightrag.GraphRelationship, error) {
 	query := `
-MATCH (:base {entity_id: $source_entity_id})-[r:DIRECTED]->(:base {entity_id: $target_entity_id})
+MATCH (start:base {entity_id: $source_entity_id})-[r]->(end:base {entity_id: $target_entity_id})
 RETURN {
 keywords: r.keywords,
 weight: r.weight,
@@ -250,7 +250,11 @@ func (k Kuzu) GraphEntities(names []string) (map[string]golightrag.GraphEntity, 
 		return map[string]golightrag.GraphEntity{}, nil
 	}
 
-	query := `MATCH (n:base) WHERE n.entity_id IN $entityIDs RETURN n`
+	query := `
+	MATCH (n:base) 
+	WHERE n.entity_id IN $entityIDs 
+	RETURN n, n.entity_id as entity_id
+	`
 	params := map[string]any{"entityIDs": names}
 	prepped, _ := k.Conn.Prepare(query)
 
@@ -289,7 +293,8 @@ func (k Kuzu) GraphRelationships(pairs [][2]string) (map[string]golightrag.Graph
 
 	query := `
 UNWIND $pairs AS pair
-MATCH (start:base {entity_id: pair[0]})-[r]-(end:base {entity_id: pair[1]})
+MATCH (start:base)-[r]-(end:base)
+WHERE start.entity_id = pair[0] AND end.entity_id = pair[1]
 RETURN pair[0] as source, pair[1] as target, {
 keywords: r.keywords,
 weight: r.weight,
@@ -342,8 +347,10 @@ func (k Kuzu) GraphCountEntitiesRelationships(names []string) (map[string]int, e
 	}
 
 	query := `
-MATCH (n:base) WHERE n.entity_id IN $entity_ids
-RETURN n.entity_id AS entity_id, size((n)-->()) + size((n)<--()) AS degree
+MATCH (n:base)
+WHERE n.entity_id IN $entity_ids
+OPTIONAL MATCH (n)-[r]-()
+RETURN n.entity_id AS entity_id, COUNT(r) AS degree
 `
 	params := map[string]any{"entity_ids": names}
 	prepped, _ := k.Conn.Prepare(query)
@@ -379,8 +386,10 @@ func (k Kuzu) GraphRelatedEntities(names []string) (map[string][]golightrag.Grap
 		return map[string][]golightrag.GraphEntity{}, nil
 	}
 	query := `
-MATCH (n:base)-[]-(connected:base)
+MATCH (n:base)
 WHERE n.entity_id IN $entity_ids
+OPTIONAL MATCH (n)-[r]-(connected:base)
+WHERE connected.entity_id IS NOT NULL
 RETURN n.entity_id as source_id, collect(connected) as connected_nodes
 `
 	params := map[string]any{"entity_ids": names}
