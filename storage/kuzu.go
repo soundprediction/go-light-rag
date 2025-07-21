@@ -149,7 +149,7 @@ func (k Kuzu) GraphEntity(name string) (golightrag.GraphEntity, error) {
 	if err != nil {
 		return golightrag.GraphEntity{}, fmt.Errorf("failed to get node value: %w", err)
 	}
-	nodeProps, ok := nodeVal.(Kuzu.Node)
+	nodeProps, ok := nodeVal.(kuzu.Node)
 	if !ok {
 		return golightrag.GraphEntity{}, fmt.Errorf("invalid node type, got %T, Kuzu.Node", nodeVal)
 	}
