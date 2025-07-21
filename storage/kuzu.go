@@ -159,16 +159,7 @@ func (k Kuzu) GraphEntity(name string) (golightrag.GraphEntity, error) {
 // GraphRelationship retrieves a relationship between two entities from the Kuzu database.
 func (k Kuzu) GraphRelationship(sourceEntity, targetEntity string) (golightrag.GraphRelationship, error) {
 	query := `
-MATCH (start:base {entity_id: $source_entity_id}) -[r]-> (:base {entity_id: $target_entity_id})
-RETURN {
-keywords: r.keywords,
-weight: r.weight,
-description: r.description,
-created_at: r.created_at,
-source_ids: r.source_ids
-} as edge_properties
-UNION
-MATCH (start:base {entity_id: $source_entity_id}) <-[r]- (:base {entity_id: $target_entity_id})
+MATCH (s:base {entity_id: $source_entity_id}) -[r]- (e:base {entity_id: $target_entity_id})
 RETURN {
 keywords: r.keywords,
 weight: r.weight,
