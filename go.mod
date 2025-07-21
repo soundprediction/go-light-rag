@@ -11,7 +11,7 @@ require (
 	github.com/milvus-io/milvus/client/v2 v2.5.1
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.0
 	github.com/ollama/ollama v0.9.6
-	github.com/philippgille/chromem-go v0.7.0
+	github.com/philippgille/chromem-go v0.7.1-0.20250720180857-4e5d21d5b8ce
 	github.com/redis/go-redis/v9 v9.7.3
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/sashabaranov/go-openai v1.38.0
