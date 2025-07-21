@@ -133,7 +133,7 @@ func (k Kuzu) GraphEntity(name string) (golightrag.GraphEntity, error) {
 	prepped, _ := k.Conn.Prepare(query)
 	queryResult, err := k.Conn.Execute(prepped, params)
 	if err != nil {
-		return golightrag.GraphEntity{}, fmt.Errorf("failed to run query: %w", err)
+		return golightrag.GraphEntity{}, fmt.Errorf("failed to run GraphEntity query: %w", err)
 	}
 	defer queryResult.Close()
 
@@ -142,12 +142,12 @@ func (k Kuzu) GraphEntity(name string) (golightrag.GraphEntity, error) {
 	}
 	row, err := queryResult.Next()
 	if err != nil {
-		return golightrag.GraphEntity{}, fmt.Errorf("failed to get result row: %w", err)
+		return golightrag.GraphEntity{}, fmt.Errorf("failed to get GraphEntity result row: %w", err)
 	}
 
 	nodeVal, err := row.GetValue(0)
 	if err != nil {
-		return golightrag.GraphEntity{}, fmt.Errorf("failed to get node value: %w", err)
+		return golightrag.GraphEntity{}, fmt.Errorf("failed to get GraphEntity node value: %w", err)
 	}
 	nodeProps, ok := nodeVal.(kuzu.Node)
 	if !ok {
@@ -160,7 +160,7 @@ func (k Kuzu) GraphEntity(name string) (golightrag.GraphEntity, error) {
 func (k Kuzu) GraphRelationship(sourceEntity, targetEntity string) (golightrag.GraphRelationship, error) {
 	query := `
 MATCH (:Base {entity_id: $source_entity_id})-[r:DIRECTED]->(:Base {entity_id: $target_entity_id})
-RETURN r{.*} as edge_properties
+RETURN properties(rels(r)) as edge_properties
 `
 	params := map[string]any{
 		"source_entity_id": sourceEntity,
@@ -169,7 +169,7 @@ RETURN r{.*} as edge_properties
 	prepped, _ := k.Conn.Prepare(query)
 	queryResult, err := k.Conn.Execute(prepped, params)
 	if err != nil {
-		return golightrag.GraphRelationship{}, fmt.Errorf("failed to run query: %w", err)
+		return golightrag.GraphRelationship{}, fmt.Errorf("failed to run GraphRelationship query: %w", err)
 	}
 	defer queryResult.Close()
 
@@ -178,11 +178,11 @@ RETURN r{.*} as edge_properties
 	}
 	row, err := queryResult.Next()
 	if err != nil {
-		return golightrag.GraphRelationship{}, fmt.Errorf("failed to get result row: %w", err)
+		return golightrag.GraphRelationship{}, fmt.Errorf("failed to get GraphRelationship result row: %w", err)
 	}
 	edgePropsVal, err := row.GetValue(0)
 	if err != nil {
-		return golightrag.GraphRelationship{}, fmt.Errorf("failed to get edge properties value: %w", err)
+		return golightrag.GraphRelationship{}, fmt.Errorf("failed to get edge GraphRelationship properties value: %w", err)
 	}
 	props, ok := edgePropsVal.(map[string]any)
 	if !ok {
@@ -207,8 +207,11 @@ ON MATCH SET n.entity_type = $entity_type, n.source_ids = $source_ids, n.descrip
 		"source_ids":  entity.SourceIDs,
 		"created_at":  entity.CreatedAt.Format(time.RFC3339),
 	}
-	prepped, _ := k.Conn.Prepare(query)
-	_, err := k.Conn.Execute(prepped, params)
+	prepped, err := k.Conn.Prepare(query)
+	if err != nil {
+		return fmt.Errorf("failed to prepare GraphUpsertEntity: %w", err)
+	}
+	_, err = k.Conn.Execute(prepped, params)
 	return err
 }
 
@@ -247,7 +250,7 @@ func (k Kuzu) GraphEntities(names []string) (map[string]golightrag.GraphEntity, 
 
 	queryResult, err := k.Conn.Execute(prepped, params)
 	if err != nil {
-		return nil, fmt.Errorf("failed to run query: %w", err)
+		return nil, fmt.Errorf("failed to run GraphUpsertRelationship query: %w", err)
 	}
 	defer queryResult.Close()
 
@@ -255,7 +258,7 @@ func (k Kuzu) GraphEntities(names []string) (map[string]golightrag.GraphEntity, 
 	for queryResult.HasNext() {
 		row, err := queryResult.Next()
 		if err != nil {
-			return nil, fmt.Errorf("failed to get result row: %w", err)
+			return nil, fmt.Errorf("failed to get GraphUpsertRelationship result row: %w", err)
 		}
 		nodeVal, err := row.GetValue(0)
 		if err != nil {
@@ -281,7 +284,7 @@ func (k Kuzu) GraphRelationships(pairs [][2]string) (map[string]golightrag.Graph
 	query := `
 UNWIND $pairs AS pair
 MATCH (start:Base {entity_id: pair[0]})-[r:DIRECTED]->(end:Base {entity_id: pair[1]})
-RETURN pair[0] as source, pair[1] as target, r{.*} as edge_properties
+RETURN pair[0] as source, pair[1] as target, properties(rels(r)) as edge_properties
 `
 	pairsParam := make([][]string, len(pairs))
 	for i, p := range pairs {
@@ -335,7 +338,7 @@ RETURN n.entity_id AS entity_id, size((n)-->()) + size((n)<--()) AS degree
 
 	queryResult, err := k.Conn.Execute(prepped, params)
 	if err != nil {
-		return nil, fmt.Errorf("failed to run query: %w", err)
+		return nil, fmt.Errorf("failed to run GraphCountEntitiesRelationships query: %w", err)
 	}
 	defer queryResult.Close()
 
@@ -343,7 +346,7 @@ RETURN n.entity_id AS entity_id, size((n)-->()) + size((n)<--()) AS degree
 	for queryResult.HasNext() {
 		row, err := queryResult.Next()
 		if err != nil {
-			return nil, fmt.Errorf("failed to get result row: %w", err)
+			return nil, fmt.Errorf("failed to get result GraphCountEntitiesRelationships row: %w", err)
 		}
 		entityIDVal, _ := row.GetValue(0)
 		degreeVal, _ := row.GetValue(1)
@@ -373,7 +376,7 @@ RETURN n.entity_id as source_id, collect(connected) as connected_nodes
 
 	queryResult, err := k.Conn.Execute(prepped, params)
 	if err != nil {
-		return nil, fmt.Errorf("failed to run query: %w", err)
+		return nil, fmt.Errorf("failed to run GraphRelatedEntities query: %w", err)
 	}
 	defer queryResult.Close()
 
@@ -381,7 +384,7 @@ RETURN n.entity_id as source_id, collect(connected) as connected_nodes
 	for queryResult.HasNext() {
 		row, err := queryResult.Next()
 		if err != nil {
-			return nil, fmt.Errorf("failed to get result row: %w", err)
+			return nil, fmt.Errorf("failed to get GraphRelatedEntities result row: %w", err)
 		}
 		sourceIDVal, _ := row.GetValue(0)
 		connectedNodesVal, _ := row.GetValue(1)
