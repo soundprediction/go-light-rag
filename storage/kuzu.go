@@ -306,7 +306,7 @@ func (k Kuzu) GraphRelationships(pairs [][2]string) (map[string]golightrag.Graph
 
 	query := `
 UNWIND $pairs AS pair
-MATCH (s:base {entity_id: pair[1]})-[r]->(e:base {entity_id: pair[2]})
+MATCH (s:base {entity_id: pair[1]})-[r]-(e:base {entity_id: pair[2]})
 RETURN pair[1] as source, pair[2] as target, {
 keywords: r.keywords,
 weight: r.weight,
@@ -400,13 +400,7 @@ func (k Kuzu) GraphRelatedEntities(names []string) (map[string][]golightrag.Grap
 	query := `
 MATCH (n:base)
 WHERE n.entity_id IN $entity_ids
-OPTIONAL MATCH (n)-[r]->(connected:base)
-WHERE connected.entity_id IS NOT NULL
-RETURN n.entity_id as source_id, collect(connected) as connected_nodes
-UNION
-MATCH (n:base)
-WHERE n.entity_id IN $entity_ids
-OPTIONAL MATCH (n)<-[r2]-(connected:base)
+OPTIONAL MATCH (n)-[r]-(connected:base)
 WHERE connected.entity_id IS NOT NULL
 RETURN n.entity_id as source_id, collect(connected) as connected_nodes
 `
