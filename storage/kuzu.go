@@ -224,13 +224,13 @@ ON MATCH SET n.entity_type = $entity_type, n.source_ids = $source_ids, n.descrip
 // GraphUpsertRelationship creates or updates a relationship between two entities.
 func (k Kuzu) GraphUpsertRelationship(relationship golightrag.GraphRelationship) error {
 	query := `
-MATCH (source:base {entity_id: $source_entity_id})
-WITH source
-MATCH (target:base {entity_id: $target_entity_id})
-MERGE (source)<-[r:DIRECTED]-(target)
+MATCH (s:base {entity_id: $source_entity_id})
+WITH s
+MATCH (t:base {entity_id: $target_entity_id})
+MERGE (s)<-[r:DIRECTED]-(t)
 ON CREATE SET  r.weight = $weight, r.description = $description, r.keywords = $keywords, r.source_ids = $source_ids, r.created_at = $created_at
 ON MATCH SET r.weight = $weight, r.description = $description, r.keywords = $keywords, r.source_ids = $source_ids, r.created_at = $created_at
-MERGE (target)-[r2:DIRECTED]->(source)
+MERGE (t)-[r2:DIRECTED]->(s)
 ON CREATE SET r2.weight = $weight, r2.description = $description, r2.keywords = $keywords, r2.source_ids = $source_ids, r2.created_at = $created_at
 ON MATCH SET  r2.weight = $weight, r2.description = $description, r2.keywords = $keywords, r2.source_ids = $source_ids, r2.created_at = $created_at
 `
@@ -243,8 +243,11 @@ ON MATCH SET  r2.weight = $weight, r2.description = $description, r2.keywords = 
 		"source_ids":       relationship.SourceIDs,
 		"created_at":       relationship.CreatedAt.Format(time.RFC3339),
 	}
-	prepped, _ := k.Conn.Prepare(query)
-	_, err := k.Conn.Execute(prepped, params)
+	prepped, err := k.Conn.Prepare(query)
+	if err != nil {
+		return fmt.Errorf("failed to run GraphUpsertRelationship: %w", err)
+	}
+	_, err = k.Conn.Execute(prepped, params)
 	return err
 }
 
