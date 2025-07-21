@@ -161,7 +161,7 @@ func (k Kuzu) GraphEntity(name string) (golightrag.GraphEntity, error) {
 func (k Kuzu) GraphRelationship(sourceEntity, targetEntity string) (golightrag.GraphRelationship, error) {
 	query := `
 MATCH (:Base {entity_id: $source_entity_id})-[r:DIRECTED]->(:Base {entity_id: $target_entity_id})
-RETURN properties(r) as edge_properties
+RETURN r{.*} as edge_properties
 `
 	params := map[string]any{
 		"source_entity_id": sourceEntity,
@@ -198,18 +198,15 @@ RETURN properties(r) as edge_properties
 func (k Kuzu) GraphUpsertEntity(entity golightrag.GraphEntity) error {
 	query := `
 MERGE (n:Base {entity_id: $entity_id})
-ON CREATE SET n = $properties
-ON MATCH SET n += $properties
+ON CREATE SET n.entity_type = $entity_type, n.source_ids = $source_ids, n.description = $description, n.created_at = $created_at
+ON MATCH SET n.entity_type = $entity_type, n.source_ids = $source_ids, n.description = $description, n.created_at = $created_at
 `
 	params := map[string]any{
-		"entity_id": entity.Name,
-		"properties": map[string]any{
-			"entity_id":   entity.Name,
-			"entity_type": entity.Type,
-			"description": entity.Descriptions,
-			"source_ids":  entity.SourceIDs,
-			"created_at":  entity.CreatedAt.Format(time.RFC3339),
-		},
+		"entity_id":   entity.Name,
+		"entity_type": entity.Type,
+		"description": entity.Descriptions,
+		"source_ids":  entity.SourceIDs,
+		"created_at":  entity.CreatedAt.Format(time.RFC3339),
 	}
 	prepped, _ := k.Conn.Prepare(query)
 	_, err := k.Conn.Execute(prepped, params)
@@ -222,19 +219,17 @@ func (k Kuzu) GraphUpsertRelationship(relationship golightrag.GraphRelationship)
 MATCH (source:Base {entity_id: $source_entity_id})
 MATCH (target:Base {entity_id: $target_entity_id})
 MERGE (source)-[r:DIRECTED]->(target)
-ON CREATE SET r = $properties
-ON MATCH SET r += $properties
+ON CREATE SET  r.weight = $weight, r.description = $description, r.keywords = $keywords, r.source_ids = $source_ids, r.created_at = $created_at
+ON MATCH SET r.weight = $weight, r.description = $description, r.keywords = $keywords, r.source_ids = $source_ids, r.created_at = $created_at
 `
 	params := map[string]any{
 		"source_entity_id": relationship.SourceEntity,
 		"target_entity_id": relationship.TargetEntity,
-		"properties": map[string]any{
-			"weight":      relationship.Weight,
-			"description": relationship.Descriptions,
-			"keywords":    strings.Join(relationship.Keywords, golightrag.GraphFieldSeparator),
-			"source_ids":  relationship.SourceIDs,
-			"created_at":  relationship.CreatedAt.Format(time.RFC3339),
-		},
+		"weight":           relationship.Weight,
+		"description":      relationship.Descriptions,
+		"keywords":         strings.Join(relationship.Keywords, golightrag.GraphFieldSeparator),
+		"source_ids":       relationship.SourceIDs,
+		"created_at":       relationship.CreatedAt.Format(time.RFC3339),
 	}
 	prepped, _ := k.Conn.Prepare(query)
 	_, err := k.Conn.Execute(prepped, params)
@@ -287,7 +282,7 @@ func (k Kuzu) GraphRelationships(pairs [][2]string) (map[string]golightrag.Graph
 	query := `
 UNWIND $pairs AS pair
 MATCH (start:Base {entity_id: pair[0]})-[r:DIRECTED]->(end:Base {entity_id: pair[1]})
-RETURN pair[0] as source, pair[1] as target, properties(r) as edge_properties
+RETURN pair[0] as source, pair[1] as target, r{.*} as edge_properties
 `
 	pairsParam := make([][]string, len(pairs))
 	for i, p := range pairs {
