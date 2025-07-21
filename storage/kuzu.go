@@ -49,7 +49,7 @@ func NewKuzu(dbPath string, systemConfig kuzu.SystemConfig) (Kuzu, error) {
 func (k Kuzu) SetupSchema() error {
 	// Define the node table. entity_id is the primary key.
 	nodeTableQuery := `
-    CREATE NODE TABLE IF NOT EXISTS Base (
+    CREATE NODE TABLE IF NOT EXISTS base (
         entity_id STRING,
         entity_type STRING,
         description STRING,
@@ -60,7 +60,7 @@ func (k Kuzu) SetupSchema() error {
 	// Define the relationship table.
 	relTableQuery := `
     CREATE REL TABLE IF NOT EXISTS DIRECTED (
-        FROM Base TO Base,
+        FROM base TO base,
         weight DOUBLE,
         description STRING,
         keywords STRING,
@@ -70,7 +70,7 @@ func (k Kuzu) SetupSchema() error {
 
 	noteStmt, err := k.Conn.Query(nodeTableQuery)
 	if err != nil {
-		return fmt.Errorf("failed to execute create Base node table: %w", err)
+		return fmt.Errorf("failed to execute create base node table: %w", err)
 	}
 	defer noteStmt.Close()
 
@@ -128,7 +128,7 @@ func graphRelationshipFromMap(source, target string, props map[string]any) golig
 
 // GraphEntity retrieves a graph entity by name from the Kuzu database.
 func (k Kuzu) GraphEntity(name string) (golightrag.GraphEntity, error) {
-	query := `MATCH (n:Base {entity_id: $entityID}) RETURN n`
+	query := `MATCH (n:base {entity_id: $entityID}) RETURN n`
 	params := map[string]any{"entityID": name}
 	prepped, _ := k.Conn.Prepare(query)
 	queryResult, err := k.Conn.Execute(prepped, params)
@@ -159,8 +159,14 @@ func (k Kuzu) GraphEntity(name string) (golightrag.GraphEntity, error) {
 // GraphRelationship retrieves a relationship between two entities from the Kuzu database.
 func (k Kuzu) GraphRelationship(sourceEntity, targetEntity string) (golightrag.GraphRelationship, error) {
 	query := `
-MATCH (:Base {entity_id: $source_entity_id})-[r:DIRECTED]->(:Base {entity_id: $target_entity_id})
-RETURN properties(rels(r)) as edge_properties
+MATCH (:base {entity_id: $source_entity_id})-[r:DIRECTED]->(:base {entity_id: $target_entity_id})
+RETURN {
+keywords: r.keywords,
+weight: r.weight,
+description: r.description,
+created_at: r.created_at,
+source_ids: r.source_ids
+} as edge_properties
 `
 	params := map[string]any{
 		"source_entity_id": sourceEntity,
@@ -196,7 +202,7 @@ RETURN properties(rels(r)) as edge_properties
 // GraphUpsertEntity creates or updates an entity in the Kuzu graph database.
 func (k Kuzu) GraphUpsertEntity(entity golightrag.GraphEntity) error {
 	query := `
-MERGE (n:Base {entity_id: $entity_id})
+MERGE (n:base {entity_id: $entity_id})
 ON CREATE SET n.entity_type = $entity_type, n.source_ids = $source_ids, n.description = $description, n.created_at = $created_at
 ON MATCH SET n.entity_type = $entity_type, n.source_ids = $source_ids, n.description = $description, n.created_at = $created_at
 `
@@ -218,8 +224,8 @@ ON MATCH SET n.entity_type = $entity_type, n.source_ids = $source_ids, n.descrip
 // GraphUpsertRelationship creates or updates a relationship between two entities.
 func (k Kuzu) GraphUpsertRelationship(relationship golightrag.GraphRelationship) error {
 	query := `
-MATCH (source:Base {entity_id: $source_entity_id})
-MATCH (target:Base {entity_id: $target_entity_id})
+MATCH (source:base {entity_id: $source_entity_id})
+MATCH (target:base {entity_id: $target_entity_id})
 MERGE (source)-[r:DIRECTED]->(target)
 ON CREATE SET  r.weight = $weight, r.description = $description, r.keywords = $keywords, r.source_ids = $source_ids, r.created_at = $created_at
 ON MATCH SET r.weight = $weight, r.description = $description, r.keywords = $keywords, r.source_ids = $source_ids, r.created_at = $created_at
@@ -244,7 +250,7 @@ func (k Kuzu) GraphEntities(names []string) (map[string]golightrag.GraphEntity, 
 		return map[string]golightrag.GraphEntity{}, nil
 	}
 
-	query := `MATCH (n:Base) WHERE n.entity_id IN $entityIDs RETURN n`
+	query := `MATCH (n:base) WHERE n.entity_id IN $entityIDs RETURN n`
 	params := map[string]any{"entityIDs": names}
 	prepped, _ := k.Conn.Prepare(query)
 
@@ -283,8 +289,14 @@ func (k Kuzu) GraphRelationships(pairs [][2]string) (map[string]golightrag.Graph
 
 	query := `
 UNWIND $pairs AS pair
-MATCH (start:Base {entity_id: pair[0]})-[r:DIRECTED]->(end:Base {entity_id: pair[1]})
-RETURN pair[0] as source, pair[1] as target, properties(rels(r)) as edge_properties
+MATCH (start:base {entity_id: pair[0]})-[r]-(end:base {entity_id: pair[1]})
+RETURN pair[0] as source, pair[1] as target, {
+keywords: r.keywords,
+weight: r.weight,
+description: r.description,
+created_at: r.created_at,
+source_ids: r.source_ids
+} as edge_properties
 `
 	pairsParam := make([][]string, len(pairs))
 	for i, p := range pairs {
@@ -330,7 +342,7 @@ func (k Kuzu) GraphCountEntitiesRelationships(names []string) (map[string]int, e
 	}
 
 	query := `
-MATCH (n:Base) WHERE n.entity_id IN $entity_ids
+MATCH (n:base) WHERE n.entity_id IN $entity_ids
 RETURN n.entity_id AS entity_id, size((n)-->()) + size((n)<--()) AS degree
 `
 	params := map[string]any{"entity_ids": names}
@@ -367,7 +379,7 @@ func (k Kuzu) GraphRelatedEntities(names []string) (map[string][]golightrag.Grap
 		return map[string][]golightrag.GraphEntity{}, nil
 	}
 	query := `
-MATCH (n:Base)-[]-(connected:Base)
+MATCH (n:base)-[]-(connected:base)
 WHERE n.entity_id IN $entity_ids
 RETURN n.entity_id as source_id, collect(connected) as connected_nodes
 `
