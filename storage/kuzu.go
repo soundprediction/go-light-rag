@@ -149,12 +149,11 @@ func (k Kuzu) GraphEntity(name string) (golightrag.GraphEntity, error) {
 	if err != nil {
 		return golightrag.GraphEntity{}, fmt.Errorf("failed to get node value: %w", err)
 	}
-	nodeProps, ok := nodeVal.(map[string]any)
+	nodeProps, ok := nodeVal.(Kuzu.Node)
 	if !ok {
-		return golightrag.GraphEntity{}, fmt.Errorf("invalid node type, got %T, want map[string]any", nodeVal)
+		return golightrag.GraphEntity{}, fmt.Errorf("invalid node type, got %T, Kuzu.Node", nodeVal)
 	}
-
-	return graphEntityFromMap(nodeProps), nil
+	return graphEntityFromMap(nodeProps.Properties), nil
 }
 
 // GraphRelationship retrieves a relationship between two entities from the Kuzu database.
