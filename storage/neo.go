@@ -473,6 +473,8 @@ RETURN n.entity_id AS entity_id, COUNT(r) AS degree
 
 // GraphRelatedEntities retrieves all entities related to multiple input entities.
 // It returns a map of entity names to slices of related GraphEntity objects.
+//
+//nolint:gocognit
 func (n Neo4J) GraphRelatedEntities(names []string) (map[string][]golightrag.GraphEntity, error) {
 	if len(names) == 0 {
 		return map[string][]golightrag.GraphEntity{}, nil

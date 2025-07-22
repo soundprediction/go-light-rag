@@ -1,4 +1,3 @@
-//nolint:lll
 package golightrag
 
 // EntityExtractionPromptData contains the data needed to generate prompts
@@ -68,6 +67,7 @@ type KeywordExtractionPromptExample struct {
 	HighLevelKeywords []string
 }
 
+//nolint:lll
 const extractEntitiesPrompt = `---Goal---
 {{.Goal}}
 
@@ -155,6 +155,7 @@ Text:
 ######################
 Output:`
 
+//nolint:lll
 const gleanEntitiesPrompt = `
 MANY entities and relationships were missed in the last extraction. Please identify additional entities and relationships.
 
@@ -210,6 +211,7 @@ It appears some entities may have still been missed.
 
 Answer ONLY by "YES" OR "NO" if there are still entities that need to be added.`
 
+//nolint:lll
 const summarizeDescriptionsPrompt = `
 You are a helpful assistant responsible for generating a comprehensive summary of the data provided below.
 Given one or two entities, and a list of descriptions, all related to the same entity or group of entities.
@@ -226,6 +228,7 @@ Description List: {{.Descriptions}}
 Output:
 `
 
+//nolint:lll
 const keywordExtractionPrompt = `---Role---
 
 You are a helpful assistant tasked with identifying both high-level and low-level keywords in the user's query and conversation history.

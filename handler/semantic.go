@@ -108,6 +108,7 @@ func (s Semantic) ChunksDocument(content string) ([]golightrag.Source, error) {
 	return s.semanticChunk(content)
 }
 
+//nolint:gocognit // Semantic chunking function with LLM parsing and validation logic
 func (s Semantic) semanticChunk(content string) ([]golightrag.Source, error) {
 	// Prepare the prompt with the content
 	prompt := strings.ReplaceAll(semanticChunkingPrompt, "{{.Content}}", content)

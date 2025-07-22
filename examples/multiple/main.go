@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"log"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -87,15 +88,17 @@ When handling relationships with timestamps:
 - Do not make anything up. Do not include information not provided by the Knowledge Base.`
 
 func main() {
+	log.SetFlags(0)
+
 	// Load configuration from YAML file
 	cfg, err := loadConfig(configPath)
 	if err != nil {
-		fmt.Printf("Error loading configuration: %v\n", err)
+		log.Printf("Error loading configuration: %v\n", err)
 		return
 	}
 
 	if cfg.DocsDir == "" {
-		fmt.Printf("Document directory not specified in config\n")
+		log.Printf("Document directory not specified in config\n")
 		return
 	}
 
@@ -126,7 +129,7 @@ func main() {
 
 	graphDB, err := storage.NewNeo4J(cfg.Neo4JURI, cfg.Neo4JUser, cfg.Neo4JPassword)
 	if err != nil {
-		fmt.Printf("Error creating neo4jDB: %v\n", err)
+		log.Printf("Error creating neo4jDB: %v\n", err)
 		return
 	}
 	defer func() {
@@ -134,26 +137,26 @@ func main() {
 		defer closeCancel()
 
 		if err := graphDB.Close(closeCtx); err != nil {
-			fmt.Printf("Error closing neo4jDB: %v\n", err)
+			log.Printf("Error closing neo4jDB: %v\n", err)
 		}
 	}()
 
 	vecDB, err := storage.NewChromem("vec.db", 5,
 		storage.EmbeddingFunc(chromem.NewEmbeddingFuncOpenAI(cfg.OpenAIAPIKey, chromem.EmbeddingModelOpenAI3Large)))
 	if err != nil {
-		fmt.Printf("Error creating chromemDB: %v\n", err)
+		log.Printf("Error creating chromemDB: %v\n", err)
 		return
 	}
 
 	kvDB, err := storage.NewBolt("kv.db")
 	if err != nil {
-		fmt.Printf("Error creating boltDB: %v\n", err)
+		log.Printf("Error creating boltDB: %v\n", err)
 		return
 	}
 
 	// Ensure hash bucket exists
 	if err := createHashBucket(kvDB); err != nil {
-		fmt.Printf("Error creating hash bucket: %v\n", err)
+		log.Printf("Error creating hash bucket: %v\n", err)
 		return
 	}
 
@@ -186,7 +189,7 @@ func main() {
 
 	// Process all files in the directory
 	if err := processDocumentDirectory(cfg.DocsDir, kvDB, store, defaultHandler, goHandler, openAI, logger); err != nil {
-		fmt.Printf("Error processing document directory: %v\n", err)
+		log.Printf("Error processing document directory: %v\n", err)
 		return
 	}
 
@@ -215,6 +218,7 @@ func createHashBucket(kvDB storage.Bolt) error {
 	})
 }
 
+//nolint:gocognit,funlen // File processing function with necessary conditional logic
 func processDocumentDirectory(
 	docDir string,
 	kvDB storage.Bolt,
@@ -498,6 +502,7 @@ func insert(
 	return golightrag.Insert(doc, docHandler, storage, llm, logger)
 }
 
+//nolint:funlen // Interactive demo function is long but breaking it down would reduce readability
 func query(
 	defaultHandler, goHandler golightrag.QueryHandler,
 	store golightrag.Storage,
@@ -512,21 +517,21 @@ func query(
 
 	for {
 		// Ask user to select handler first
-		fmt.Println("Select handler (type the number):")
-		fmt.Println("1. Default Handler - General purpose queries")
-		fmt.Println("2. Go Handler - Go programming language specific queries")
-		fmt.Println("(type 'exit' to exit)")
+		log.Println("Select handler (type the number):")
+		log.Println("1. Default Handler - General purpose queries")
+		log.Println("2. Go Handler - Go programming language specific queries")
+		log.Println("(type 'exit' to exit)")
 
 		reader := bufio.NewReader(os.Stdin)
 		handlerChoice, err := reader.ReadString('\n')
 		if err != nil {
-			fmt.Printf("Error reading input: %v\n", err)
+			log.Printf("Error reading input: %v\n", err)
 			return
 		}
 		handlerChoice = strings.TrimSpace(handlerChoice)
 
 		if handlerChoice == "exit" {
-			fmt.Println("Exiting...")
+			log.Println("Exiting...")
 			return
 		}
 
@@ -535,28 +540,28 @@ func query(
 		switch handlerChoice {
 		case "1":
 			selectedHandler = defaultHandler
-			fmt.Println("Using Default Handler")
+			log.Println("Using Default Handler")
 		case "2":
 			selectedHandler = goHandler
-			fmt.Println("Using Go Handler")
+			log.Println("Using Go Handler")
 		default:
-			fmt.Println("Invalid choice. Using Default Handler")
+			log.Println("Invalid choice. Using Default Handler")
 			selectedHandler = defaultHandler
 		}
 
 		logger.Info("Selected handler", "type", fmt.Sprintf("%T", selectedHandler))
 
 		// Now get the actual query
-		fmt.Println("Insert query: (type 'exit' to exit)")
+		log.Println("Insert query: (type 'exit' to exit)")
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			fmt.Printf("Error reading input: %v\n", err)
+			log.Printf("Error reading input: %v\n", err)
 			return
 		}
 		line = strings.TrimSpace(line)
 
 		if line == "exit" {
-			fmt.Println("Exiting...")
+			log.Println("Exiting...")
 			return
 		}
 
@@ -579,7 +584,7 @@ func query(
 		// Query the RAG system with the selected handler
 		res, err := golightrag.Query(convo, selectedHandler, store, llm, logger)
 		if err != nil {
-			fmt.Printf("Error querying: %v\n", err)
+			log.Printf("Error querying: %v\n", err)
 			return
 		}
 
@@ -601,7 +606,7 @@ func query(
 		tmpl := template.New("rag-prompt")
 		tmpl = template.Must(tmpl.Parse(ragPrompt))
 		if err := tmpl.Execute(&buf, promptData); err != nil {
-			fmt.Printf("Error executing template: %v\n", err)
+			log.Printf("Error executing template: %v\n", err)
 			return
 		}
 		promptText := buf.String()
@@ -610,13 +615,13 @@ func query(
 
 		llmResponse, err := llm.Chat([]string{promptText})
 		if err != nil {
-			fmt.Printf("Error calling LLM: %v\n", err)
+			log.Printf("Error calling LLM: %v\n", err)
 			return
 		}
 
-		fmt.Println("\nAssistant:")
-		fmt.Println(llmResponse)
-		fmt.Println()
+		log.Println("\nAssistant:")
+		log.Println(llmResponse)
+		log.Println()
 
 		convo = append(convo, golightrag.QueryConversation{
 			Role:    golightrag.RoleAssistant,

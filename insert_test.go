@@ -11,7 +11,7 @@ import (
 	golightrag "github.com/MegaGrindStone/go-light-rag"
 )
 
-//nolint:gocognit,gocyclo // Ignore complexity for this test
+//nolint:gocognit,gocyclo,cyclop // Ignore complexity for this test
 func TestInsert(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	// logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{

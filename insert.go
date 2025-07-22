@@ -176,6 +176,7 @@ func extractEntities(
 	return nil
 }
 
+//nolint:funlen // Complex function with retry and gleaning logic that would be hard to break down
 func llmExtractEntities(
 	content string,
 	data EntityExtractionPromptData,
@@ -417,6 +418,7 @@ func mergeGraphEntities(
 	return nil
 }
 
+//nolint:funlen // Complex relationship merging function with storage operations
 func mergeGraphRelationships(
 	key, sourceID, language string,
 	relationships []GraphRelationship,

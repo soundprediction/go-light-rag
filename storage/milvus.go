@@ -111,6 +111,8 @@ func (m Milvus) VectorQueryEntity(keywords string) ([]string, error) {
 }
 
 // VectorQueryRelationship performs a semantic search for relationships based on the provided keywords.
+//
+//nolint:gocognit // Complex vector database query function with error handling and data processing
 func (m Milvus) VectorQueryRelationship(keywords string) ([][2]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

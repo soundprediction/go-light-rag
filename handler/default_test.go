@@ -9,6 +9,7 @@ import (
 	"github.com/MegaGrindStone/go-light-rag/internal"
 )
 
+//nolint:gocognit // Test function with many test cases and conditional logic
 func TestDefault_ChunksDocument(t *testing.T) {
 	tests := []struct {
 		name             string

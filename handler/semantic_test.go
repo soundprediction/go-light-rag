@@ -17,6 +17,7 @@ type mockLLM struct {
 	receivedPrompts []string
 }
 
+//nolint:gocognit // Test function with many test cases and complex validation logic
 func TestSemantic_ChunksDocument(t *testing.T) {
 	tests := []struct {
 		name           string

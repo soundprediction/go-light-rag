@@ -1,16 +1,18 @@
-//nolint:lll
 package handler
 
 import golightrag "github.com/MegaGrindStone/go-light-rag"
 
+//nolint:lll
 const defaultEntityExtractionGoal = `
 Given a text document that is potentially relevant to this activity and a list of entity types, identify all entities of those types from the text and all relationships among the identified entities.`
 
+//nolint:lll
 const defaultKeywordExtractionGoal = `
 Given the query and conversation history, list both high-level and low-level keywords. High-level keywords focus on overarching concepts or themes, while low-level keywords focus on specific entities, details, or concrete terms.`
 
 var defaultEntityTypes = []string{"organization", "person", "geo", "event", "category"}
 
+//nolint:lll
 var defaultEntityExtractionExamples = []golightrag.EntityExtractionPromptExample{
 	{
 		EntityTypes: []string{"person", "technology", "mission", "organization", "location"},
@@ -235,6 +237,7 @@ At the World Athletics Championship in Tokyo, Noah Carter broke the 100m sprint 
 	},
 }
 
+//nolint:lll
 var defaultKeywordExtractionExamples = []golightrag.KeywordExtractionPromptExample{
 	{
 		Query:             "How does international trade influence global economic stability?",
@@ -253,6 +256,7 @@ var defaultKeywordExtractionExamples = []golightrag.KeywordExtractionPromptExamp
 	},
 }
 
+//nolint:lll
 const goEntityExtractionGoal = `
 Given a Go code document that is potentially relevant to this activity and a list of entity types, identify all entities of those types from the code and all relationships among the identified entities. 
 
@@ -272,6 +276,7 @@ For referenced identifiers where you cannot determine if they are constants or v
 
 Extract both the defined entity in the chunk and any referenced entities, even if you only see their usage and not their definition. Identify all relationships between entities, including those that span across different code chunks.`
 
+//nolint:lll
 const goKeywordExtractionGoal = `
 Given queries and conversation history related to Go codebases, extract both high-level and low-level keywords that would be relevant for finding appropriate code chunks in a RAG system.
 
@@ -283,6 +288,7 @@ The keywords should help retrieve the most contextually appropriate code chunks 
 
 var goEntityTypes = []string{"package", "function", "method", "struct", "interface", "const", "variable", "import"}
 
+//nolint:lll
 var goEntityExtractionExamples = []golightrag.EntityExtractionPromptExample{
 	{
 		EntityTypes: goEntityTypes,
@@ -661,6 +667,7 @@ func (d Default) EntityExtractionPromptData() golightrag.EntityExtractionPromptD
 	},
 }
 
+//nolint:lll
 var goKeywordExtractionExamples = []golightrag.KeywordExtractionPromptExample{
 	{
 		Query:             "How does the SSEClient maintain connection with the server and handle reconnection?",
@@ -704,6 +711,7 @@ var goKeywordExtractionExamples = []golightrag.KeywordExtractionPromptExample{
 	},
 }
 
+//nolint:lll
 const semanticChunkingPrompt = `---Goal---
 Analyze the given text and divide it into semantically coherent sections based on thematic shifts, logical structure, or natural section boundaries.
 

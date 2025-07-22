@@ -41,6 +41,8 @@ func getCodeBetweenLines(content string, start, end int) string {
 // It returns an array of Source objects, each containing a portion of the original code
 // with appropriate metadata including token size and order index.
 // It returns an error if parsing fails or token counting encounters issues.
+//
+//nolint:gocognit,funlen // Go AST parsing function with necessary conditional logic for different node types
 func (g Go) ChunksDocument(content string) ([]golightrag.Source, error) {
 	// Parse the Go file
 	fset := token.NewFileSet()

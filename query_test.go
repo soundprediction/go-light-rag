@@ -307,6 +307,7 @@ func TestQuery(t *testing.T) {
 	})
 }
 
+//nolint:gocognit // Test function with multiple complex test cases and data structures
 func TestQueryResultString(t *testing.T) {
 	t.Run("Result with sorting by reference count", func(t *testing.T) {
 		// Create a sample QueryResult with items having different reference counts

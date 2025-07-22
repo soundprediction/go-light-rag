@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"log"
 	"log/slog"
 	"os"
 	"strings"
@@ -81,10 +82,12 @@ When handling relationships with timestamps:
 - Do not make anything up. Do not include information not provided by the Knowledge Base.`
 
 func main() {
+	log.SetFlags(0)
+
 	// Load configuration from YAML file
 	cfg, err := loadConfig(configPath)
 	if err != nil {
-		fmt.Printf("Error loading configuration: %v\n", err)
+		log.Printf("Error loading configuration: %v\n", err)
 		return
 	}
 
@@ -102,7 +105,7 @@ func main() {
 
 	graphDB, err := storage.NewNeo4J(cfg.Neo4JURI, cfg.Neo4JUser, cfg.Neo4JPassword)
 	if err != nil {
-		fmt.Printf("Error creating neo4jDB: %v\n", err)
+		log.Printf("Error creating neo4jDB: %v\n", err)
 		return
 	}
 	defer func() {
@@ -110,20 +113,20 @@ func main() {
 		defer closeCancel()
 
 		if err := graphDB.Close(closeCtx); err != nil {
-			fmt.Printf("Error closing neo4jDB: %v\n", err)
+			log.Printf("Error closing neo4jDB: %v\n", err)
 		}
 	}()
 
 	vecDB, err := storage.NewChromem("vec.db", 5,
 		storage.EmbeddingFunc(chromem.NewEmbeddingFuncOpenAI(cfg.OpenAIAPIKey, chromem.EmbeddingModelOpenAI3Large)))
 	if err != nil {
-		fmt.Printf("Error creating chromemDB: %v\n", err)
+		log.Printf("Error creating chromemDB: %v\n", err)
 		return
 	}
 
 	kvDB, err := storage.NewBolt("kv.db")
 	if err != nil {
-		fmt.Printf("Error creating boltDB: %v\n", err)
+		log.Printf("Error creating boltDB: %v\n", err)
 		return
 	}
 
@@ -156,7 +159,7 @@ func main() {
 
 	fileData, err := os.ReadFile(docPath)
 	if err != nil {
-		fmt.Printf("Error reading file: %v\n", err)
+		log.Printf("Error reading file: %v\n", err)
 		return
 	}
 	docContent := string(fileData)
@@ -165,18 +168,18 @@ func main() {
 	// to determine whether to insert the document or not.
 	noInsert, err := checkKGHash(store.Bolt, docContent)
 	if err != nil {
-		fmt.Printf("Error checking knowledge base hash: %v\n", err)
+		log.Printf("Error checking knowledge base hash: %v\n", err)
 		return
 	}
 
 	if !noInsert {
-		fmt.Printf("The document is not in the knowledge base. Inserting...\n")
+		log.Printf("The document is not in the knowledge base. Inserting...\n")
 		if err := insert(docContent, defaultHandler, store, openAI, logger); err != nil {
-			fmt.Printf("Error inserting document: %v\n", err)
+			log.Printf("Error inserting document: %v\n", err)
 			return
 		}
 		if err := saveKGHash(kvDB, docContent); err != nil {
-			fmt.Printf("Error saving knowledge base hash: %v\n", err)
+			log.Printf("Error saving knowledge base hash: %v\n", err)
 			return
 		}
 	}
@@ -276,17 +279,17 @@ func query(handler golightrag.QueryHandler, store golightrag.Storage, llm goligh
 	const maxTurns = 10
 
 	for {
-		fmt.Println("Insert query: (type 'exit' to exit)")
+		log.Println("Insert query: (type 'exit' to exit)")
 		reader := bufio.NewReader(os.Stdin)
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			fmt.Printf("Error reading input: %v\n", err)
+			log.Printf("Error reading input: %v\n", err)
 			return
 		}
 		line = strings.TrimSpace(line)
 
 		if line == "exit" {
-			fmt.Println("Exiting...")
+			log.Println("Exiting...")
 			return
 		}
 
@@ -309,7 +312,7 @@ func query(handler golightrag.QueryHandler, store golightrag.Storage, llm goligh
 		// Query the RAG system
 		res, err := golightrag.Query(convo, handler, store, llm, logger)
 		if err != nil {
-			fmt.Printf("Error querying: %v\n", err)
+			log.Printf("Error querying: %v\n", err)
 			return
 		}
 
@@ -334,7 +337,7 @@ func query(handler golightrag.QueryHandler, store golightrag.Storage, llm goligh
 		tmpl := template.New("rag-prompt")
 		tmpl = template.Must(tmpl.Parse(ragPrompt))
 		if err := tmpl.Execute(&buf, promptData); err != nil {
-			fmt.Printf("Error executing template: %v\n", err)
+			log.Printf("Error executing template: %v\n", err)
 			return
 		}
 		promptText := buf.String()
@@ -344,14 +347,14 @@ func query(handler golightrag.QueryHandler, store golightrag.Storage, llm goligh
 		// Call the LLM with the prepared prompt
 		llmResponse, err := llm.Chat([]string{promptText})
 		if err != nil {
-			fmt.Printf("Error calling LLM: %v\n", err)
+			log.Printf("Error calling LLM: %v\n", err)
 			return
 		}
 
 		// Display the LLM response
-		fmt.Println("\nAssistant:")
-		fmt.Println(llmResponse)
-		fmt.Println()
+		log.Println("\nAssistant:")
+		log.Println(llmResponse)
+		log.Println()
 
 		// Add LLM response to conversation for next turn
 		convo = append(convo, golightrag.QueryConversation{

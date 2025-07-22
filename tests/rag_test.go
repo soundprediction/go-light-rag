@@ -310,7 +310,7 @@ func BenchmarkRAGSystems(b *testing.B) {
 			}
 
 			// Run actual benchmark
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				benchRAGSystem(b, doc, ragLLM, evalLLM, lRAG, nRAG, defaultHandler, logger)
 			}
 		})
@@ -499,9 +499,10 @@ func benchRAGSystem(
 		metrics.EmpowerWins[result.Empowerment.Winner]++
 
 		// Track overall winner
-		if result.OverallWinner.Winner == "Answer 1" {
+		switch result.OverallWinner.Winner {
+		case "Answer 1":
 			metrics.LightWins++
-		} else if result.OverallWinner.Winner == "Answer 2" {
+		case "Answer 2":
 			metrics.NaiveWins++
 		}
 	}
@@ -749,7 +750,7 @@ func (l lightRAG) close() error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
-	if err := l.storage.Neo4J.Close(ctx); err != nil {
+	if err := l.storage.Close(ctx); err != nil {
 		return fmt.Errorf("error closing neo4jDB: %w", err)
 	}
 
