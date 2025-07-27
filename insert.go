@@ -139,10 +139,12 @@ func extractEntities(
 			defer func() { <-sem }()
 
 			// Extract entities and relationships for this source chunk
-			entities, relationships, err := llmExtractEntities(source.Content,
+			entities, relationships, err := llmExtractEntities(source,
 				extractPromptData, llmMaxRetries, llmMaxGleanCount, backoffDuration, llm, logger)
 			if err != nil {
 				return fmt.Errorf("failed to extract entities with LLM: %w", err)
+			} else if len(entities) == 0 && len(relationships) == 0 {
+				return nil
 			}
 
 			logger.Info("Done call LLM", "entities", len(entities), "relationships", len(relationships))
@@ -192,14 +194,14 @@ func removeMarkdownBackticks(input string) string {
 }
 
 func llmExtractEntities(
-	content string,
+	source Source,
 	data EntityExtractionPromptData,
 	maxRetries, maxGleanCount int,
 	backoffDuration time.Duration,
 	llm LLM,
 	logger *slog.Logger,
 ) (map[string][]GraphEntity, map[string][]GraphRelationship, error) {
-	data.Input = content
+	data.Input = source.Content
 	extractPrompt, err := promptTemplate("extract-entities", extractEntitiesPrompt, data)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to generate extract entities prompt: %w", err)
@@ -249,6 +251,10 @@ func llmExtractEntities(
 		var sourceParsed llmResult
 		err = json.Unmarshal([]byte(sResult), &sourceParsed)
 		if err != nil {
+			if maxRetries < retry {
+				logger.Info("LLM failed to call source: %s, content: %s", source.ID, source.Content)
+				return map[string][]GraphEntity{}, map[string][]GraphRelationship{}, nil
+			}
 			nErr := fmt.Errorf("failed to parse llm result: %w", err)
 			retry++
 			logger.Warn("Retry parse result", "retry", retry, "error", nErr)
@@ -278,6 +284,10 @@ func llmExtractEntities(
 			var gleanParsed llmResult
 			err = json.Unmarshal([]byte(gResult), &gleanParsed)
 			if err != nil {
+				if maxRetries < retry {
+					logger.Info("LLM failed to call source: %s, content: %s", source.ID, source.Content)
+					return map[string][]GraphEntity{}, map[string][]GraphRelationship{}, nil
+				}
 				nErr := fmt.Errorf("failed to parse llm result: %w", err)
 				retry++
 				logger.Warn("Retry parse result", "retry", retry, "error", nErr)
