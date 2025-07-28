@@ -212,7 +212,7 @@ func llmExtractEntities(
 	}
 
 	logger.Debug("Use LLM to extract entities from source",
-		"extractPrompt", extractPrompt, "gleanPrompt", gleanPrompt, "source", content)
+		"extractPrompt", extractPrompt, "gleanPrompt", gleanPrompt, "source", source)
 
 	type llmResult struct {
 		Entities      []GraphEntity       `json:"entities"`
