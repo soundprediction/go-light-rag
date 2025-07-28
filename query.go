@@ -62,6 +62,7 @@ type RelationshipContext struct {
 // SourceContext represents a source document chunk with reference count.
 type SourceContext struct {
 	Content  string
+	SourceId string
 	RefCount int
 }
 
@@ -462,6 +463,7 @@ func entitiesRankedSources(entities []GraphEntity, storage Storage) ([]SourceCon
 		}
 		result = append(result, SourceContext{
 			Content:  source.Content,
+			SourceId: source.ID,
 			RefCount: count,
 		})
 	}
@@ -529,7 +531,8 @@ func relationshipsRankedSources(relationships []GraphRelationship, storage Stora
 			_, ok := sourcesMap[sourceID]
 			if !ok {
 				sourcesMap[sourceID] = SourceContext{
-					Content: source.Content,
+					Content:  source.Content,
+					SourceId: sourceID,
 				}
 			}
 
@@ -673,5 +676,5 @@ func (r RelationshipContext) String() string {
 // String returns a CSV-formatted string representation of the SourceContext.
 func (s SourceContext) String() string {
 	refStr := strconv.Itoa(s.RefCount)
-	return fmt.Sprintf("%q,%q", s.Content, refStr)
+	return fmt.Sprintf("%q,%q,%q", s.Content, s.SourceId, refStr)
 }
