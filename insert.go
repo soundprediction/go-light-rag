@@ -262,7 +262,7 @@ func llmExtractEntities(
 				logger.Info("LLM failed to call source: %s, content: %s", source.ID, source.Content)
 				return map[string][]GraphEntity{}, map[string][]GraphRelationship{}, nil
 			}
-			nErr := fmt.Errorf("failed to parse llm result: %w prompt %w", err, sResult)
+			nErr := fmt.Errorf("failed to parse llm result: %w prompt %s", err, sResult)
 			retry++
 			logger.Warn("Retry parse result", "retry", retry, "error", nErr)
 			continue
