@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -193,6 +194,11 @@ func removeMarkdownBackticks(input string) string {
 	return strings.Join(filteredLines, "\n")
 }
 
+func removeThinkTags(input string) string {
+	re := regexp.MustCompile(`(?s)<think>.*?</think>`)
+	return re.ReplaceAllString(input, "")
+}
+
 func llmExtractEntities(
 	source Source,
 	data EntityExtractionPromptData,
@@ -247,6 +253,7 @@ func llmExtractEntities(
 		}
 
 		sResult := removeMarkdownBackticks(sourceResult)
+		sResult = removeThinkTags(sResult)
 		// Parse initial extraction results
 		var sourceParsed llmResult
 		err = json.Unmarshal([]byte(sResult), &sourceParsed)
@@ -255,7 +262,7 @@ func llmExtractEntities(
 				logger.Info("LLM failed to call source: %s, content: %s", source.ID, source.Content)
 				return map[string][]GraphEntity{}, map[string][]GraphRelationship{}, nil
 			}
-			nErr := fmt.Errorf("failed to parse llm result: %w", err)
+			nErr := fmt.Errorf("failed to parse llm result: %w prompt %w", err, sResult)
 			retry++
 			logger.Warn("Retry parse result", "retry", retry, "error", nErr)
 			continue
