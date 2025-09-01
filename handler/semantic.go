@@ -7,6 +7,7 @@ import (
 
 	golightrag "github.com/MegaGrindStone/go-light-rag"
 	"github.com/MegaGrindStone/go-light-rag/internal"
+	"github.com/MegaGrindStone/go-light-rag/llm"
 )
 
 // Semantic implements document handling with semantically meaningful chunking.
@@ -114,6 +115,8 @@ func (s Semantic) semanticChunk(content string) ([]golightrag.Source, error) {
 
 	// Call the LLM to generate the semantic chunks
 	response, err := s.LLM.Chat([]string{prompt})
+	response = llm.RemoveMarkdownBackticks(response)
+	response = llm.RemoveThinkTags(response)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate semantic chunks: %w", err)
 	}

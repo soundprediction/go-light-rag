@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/MegaGrindStone/go-light-rag/internal"
+	llmod "github.com/MegaGrindStone/go-light-rag/llm"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -179,21 +180,6 @@ func extractEntities(
 	return nil
 }
 
-func removeMarkdownBackticks(input string) string {
-	lines := strings.Split(input, "\n")
-
-	// Filter out lines that start with triple backticks
-	var filteredLines []string
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if !strings.HasPrefix(trimmed, "```") {
-			filteredLines = append(filteredLines, line)
-		}
-	}
-
-	return strings.Join(filteredLines, "\n")
-}
-
 func removeThinkTags(input string) string {
 	re := regexp.MustCompile(`(?s)<think>.*?</think>`)
 	return re.ReplaceAllString(input, "")
@@ -252,8 +238,8 @@ func llmExtractEntities(
 			continue
 		}
 
-		sResult := removeMarkdownBackticks(sourceResult)
-		sResult = removeThinkTags(sResult)
+		sResult := llmod.RemoveMarkdownBackticks(sourceResult)
+		sResult = llmod.RemoveThinkTags(sResult)
 		// Parse initial extraction results
 		var sourceParsed llmResult
 		err = json.Unmarshal([]byte(sResult), &sourceParsed)
@@ -285,8 +271,8 @@ func llmExtractEntities(
 				continue
 			}
 
-			gResult := removeMarkdownBackticks(gleanResult)
-			gResult = removeThinkTags(gResult)
+			gResult := llmod.RemoveMarkdownBackticks(gleanResult)
+			gResult = llmod.RemoveThinkTags(gResult)
 			// Parse glean results
 			histories = append(histories, gResult)
 
