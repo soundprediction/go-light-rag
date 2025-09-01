@@ -575,7 +575,7 @@ func buildLLM(cfg llmConfig, logger *slog.Logger) (golightrag.LLM, error) {
 	}
 }
 
-func createHashBucket(kvDB storage.Bolt) error {
+func CreateHashBucket(kvDB storage.Bolt) error {
 	return kvDB.DB.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucketIfNotExists([]byte(hashBucket))
 		return err
@@ -639,7 +639,7 @@ func newLightRAG(cfg *config, llm golightrag.LLM, logger *slog.Logger) (lightRAG
 	if err != nil {
 		return lightRAG{}, fmt.Errorf("error creating boltDB: %w", err)
 	}
-	if err := createHashBucket(kvDB); err != nil {
+	if err := CreateHashBucket(kvDB); err != nil {
 		return lightRAG{}, fmt.Errorf("error creating hash bucket: %w", err)
 	}
 
@@ -672,7 +672,7 @@ func newNaiveRAG(openAIAPIKey string, logger *slog.Logger) (naiveRAG, error) {
 	if err != nil {
 		return naiveRAG{}, fmt.Errorf("error creating boltDB: %w", err)
 	}
-	if err := createHashBucket(kvDB); err != nil {
+	if err := CreateHashBucket(kvDB); err != nil {
 		return naiveRAG{}, fmt.Errorf("error creating hash bucket: %w", err)
 	}
 

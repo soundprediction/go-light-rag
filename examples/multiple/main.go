@@ -152,7 +152,7 @@ func main() {
 	}
 
 	// Ensure hash bucket exists
-	if err := createHashBucket(kvDB); err != nil {
+	if err := CreateHashBucket(kvDB); err != nil {
 		fmt.Printf("Error creating hash bucket: %v\n", err)
 		return
 	}
@@ -208,7 +208,7 @@ func loadConfig(path string) (*config, error) {
 	return &cfg, nil
 }
 
-func createHashBucket(kvDB storage.Bolt) error {
+func CreateHashBucket(kvDB storage.Bolt) error {
 	return kvDB.DB.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucketIfNotExists([]byte(hashBucket))
 		return err
