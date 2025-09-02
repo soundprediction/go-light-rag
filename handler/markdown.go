@@ -182,7 +182,7 @@ func (ac *ASTChunker) extractSections(doc ast.Node, source []byte) []Section {
 			case *ast.Text, *ast.CodeSpan, *ast.Emphasis, *ast.Link, *ast.Image:
 				return ast.WalkContinue, nil
 			}
-			
+
 			// Add this element to the current section
 			if currentSection == nil {
 				// Create an implicit section for content before the first heading
@@ -229,7 +229,7 @@ func (ac *ASTChunker) extractSections(doc ast.Node, source []byte) []Section {
 func (ac *ASTChunker) astNodeToElement(node ast.Node, source []byte) MarkdownElement {
 	// Handle different types of nodes (block vs inline)
 	var start, stop int
-	
+
 	// Check if this is a block node (has Lines method) or inline node
 	if blockNode, ok := node.(interface{ Lines() *text.Segments }); ok {
 		lines := blockNode.Lines()
@@ -242,11 +242,11 @@ func (ac *ASTChunker) astNodeToElement(node ast.Node, source []byte) MarkdownEle
 				Metadata: make(map[string]interface{}),
 			}
 		}
-		
+
 		segment := lines.At(0)
 		start = segment.Start
 		stop = segment.Stop
-		
+
 		// For multi-line elements, get the full range
 		for i := 1; i < lines.Len(); i++ {
 			seg := lines.At(i)
@@ -264,7 +264,7 @@ func (ac *ASTChunker) astNodeToElement(node ast.Node, source []byte) MarkdownEle
 			Metadata: make(map[string]interface{}),
 		}
 	}
-	
+
 	content := string(source[start:stop])
 
 	switch n := node.(type) {
@@ -588,57 +588,57 @@ func hasActualContent(content string) bool {
 	if content == "" {
 		return false
 	}
-	
+
 	// Remove common markdown syntax patterns
 	cleaned := content
-	
+
 	// Remove heading markers (# ## ### etc.)
 	headingPattern := regexp.MustCompile(`^#{1,6}\s*$`)
 	if headingPattern.MatchString(strings.TrimSpace(cleaned)) {
 		return false
 	}
-	
+
 	// Remove horizontal rules (--- === ***)
 	hrPattern := regexp.MustCompile(`^[-=*]{3,}\s*$`)
 	if hrPattern.MatchString(strings.TrimSpace(cleaned)) {
 		return false
 	}
-	
+
 	// Remove list markers and check if anything remains
 	listPattern := regexp.MustCompile(`^[\s]*[-*+]\s*$|^[\s]*\d+\.\s*$`)
 	if listPattern.MatchString(strings.TrimSpace(cleaned)) {
 		return false
 	}
-	
+
 	// Remove blockquote markers
 	blockquotePattern := regexp.MustCompile(`^>\s*$`)
 	if blockquotePattern.MatchString(strings.TrimSpace(cleaned)) {
 		return false
 	}
-	
+
 	// Remove code block markers
 	codeBlockPattern := regexp.MustCompile("^```\\s*$|^~~~\\s*$")
 	if codeBlockPattern.MatchString(strings.TrimSpace(cleaned)) {
 		return false
 	}
-	
+
 	// Check if content contains actual text after removing markdown syntax
 	// Remove all markdown syntax and see if substantial text remains
 	syntaxPattern := regexp.MustCompile(`[#\-=*+>~` + "`" + `\[\](){}|\\_]`)
 	cleanedText := syntaxPattern.ReplaceAllString(cleaned, "")
 	cleanedText = regexp.MustCompile(`\s+`).ReplaceAllString(cleanedText, " ")
 	cleanedText = strings.TrimSpace(cleanedText)
-	
+
 	// Require at least some meaningful text (more than just single characters or numbers)
 	if len(cleanedText) < 3 {
 		return false
 	}
-	
+
 	// Check if it's just whitespace, numbers, or single characters
 	if regexp.MustCompile(`^[\s\d.,;:!?\-]*$`).MatchString(cleanedText) {
 		return false
 	}
-	
+
 	return true
 }
 
@@ -679,14 +679,11 @@ type MarkdownAst struct {
 }
 
 // NewMarkdownAst creates a new MarkdownAst handler with default Markdown chunking options
-func NewMarkdownAst() *MarkdownAst {
+func NewMarkdownAst(config DocumentConfig) *MarkdownAst {
 	return &MarkdownAst{
 		ChunkingOptions: DefaultMarkdownChunkingOptions(),
 		Language:        defaultLanguage,
-		Config: DocumentConfig{
-			BackoffDuration:  defaultBackoffDuration,
-			ConcurrencyCount: defaultConcurrencyCount,
-		},
+		Config:          config,
 	}
 }
 
@@ -707,12 +704,12 @@ func (m *MarkdownAst) ChunksDocument(content string) ([]golightrag.Source, error
 	for _, chunk := range sectionChunks {
 		// Trim the content first
 		trimmedContent := strings.TrimSpace(chunk.Text)
-		
+
 		// Skip chunks that don't have actual content
 		if !hasActualContent(trimmedContent) {
 			continue
 		}
-		
+
 		tokenCount, err := internal.CountTokens(trimmedContent)
 		if err != nil {
 			return nil, fmt.Errorf("failed to count tokens for chunk: %w", err)
