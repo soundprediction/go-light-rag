@@ -17,6 +17,7 @@ require (
 	github.com/sashabaranov/go-openai v1.38.0
 	github.com/stretchr/testify v1.10.0
 	github.com/tiktoken-go/tokenizer v0.6.0
+	github.com/yuin/goldmark v1.7.13
 	go.etcd.io/bbolt v1.4.0
 	golang.org/x/sync v0.16.0
 	gopkg.in/yaml.v2 v2.4.0
