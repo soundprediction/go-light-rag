@@ -583,6 +583,65 @@ func (ac *ASTChunker) chunkSectionByWords(section Section) []Chunk {
 	return chunks
 }
 
+// hasActualContent checks if a chunk contains meaningful content beyond markdown syntax
+func hasActualContent(content string) bool {
+	if content == "" {
+		return false
+	}
+	
+	// Remove common markdown syntax patterns
+	cleaned := content
+	
+	// Remove heading markers (# ## ### etc.)
+	headingPattern := regexp.MustCompile(`^#{1,6}\s*$`)
+	if headingPattern.MatchString(strings.TrimSpace(cleaned)) {
+		return false
+	}
+	
+	// Remove horizontal rules (--- === ***)
+	hrPattern := regexp.MustCompile(`^[-=*]{3,}\s*$`)
+	if hrPattern.MatchString(strings.TrimSpace(cleaned)) {
+		return false
+	}
+	
+	// Remove list markers and check if anything remains
+	listPattern := regexp.MustCompile(`^[\s]*[-*+]\s*$|^[\s]*\d+\.\s*$`)
+	if listPattern.MatchString(strings.TrimSpace(cleaned)) {
+		return false
+	}
+	
+	// Remove blockquote markers
+	blockquotePattern := regexp.MustCompile(`^>\s*$`)
+	if blockquotePattern.MatchString(strings.TrimSpace(cleaned)) {
+		return false
+	}
+	
+	// Remove code block markers
+	codeBlockPattern := regexp.MustCompile("^```\\s*$|^~~~\\s*$")
+	if codeBlockPattern.MatchString(strings.TrimSpace(cleaned)) {
+		return false
+	}
+	
+	// Check if content contains actual text after removing markdown syntax
+	// Remove all markdown syntax and see if substantial text remains
+	syntaxPattern := regexp.MustCompile(`[#\-=*+>~` + "`" + `\[\](){}|\\_]`)
+	cleanedText := syntaxPattern.ReplaceAllString(cleaned, "")
+	cleanedText = regexp.MustCompile(`\s+`).ReplaceAllString(cleanedText, " ")
+	cleanedText = strings.TrimSpace(cleanedText)
+	
+	// Require at least some meaningful text (more than just single characters or numbers)
+	if len(cleanedText) < 3 {
+		return false
+	}
+	
+	// Check if it's just whitespace, numbers, or single characters
+	if regexp.MustCompile(`^[\s\d.,;:!?\-]*$`).MatchString(cleanedText) {
+		return false
+	}
+	
+	return true
+}
+
 // Utility functions
 func max(a, b int) int {
 	if a > b {
@@ -643,21 +702,27 @@ func (m *MarkdownAst) ChunksDocument(content string) ([]golightrag.Source, error
 	// Perform section-aware chunking
 	sectionChunks := chunker.ChunkMarkdown(content)
 
-	// Convert to golightrag.Source format
-	results := make([]golightrag.Source, len(sectionChunks))
-	for i, chunk := range sectionChunks {
-		// Trim the content first, then count tokens
+	// Convert to golightrag.Source format, filtering out empty or syntax-only chunks
+	var results []golightrag.Source
+	for _, chunk := range sectionChunks {
+		// Trim the content first
 		trimmedContent := strings.TrimSpace(chunk.Text)
+		
+		// Skip chunks that don't have actual content
+		if !hasActualContent(trimmedContent) {
+			continue
+		}
+		
 		tokenCount, err := internal.CountTokens(trimmedContent)
 		if err != nil {
-			return nil, fmt.Errorf("failed to count tokens for chunk %d: %w", i, err)
+			return nil, fmt.Errorf("failed to count tokens for chunk: %w", err)
 		}
 
-		results[i] = golightrag.Source{
+		results = append(results, golightrag.Source{
 			Content:    trimmedContent,
 			TokenSize:  tokenCount,
 			OrderIndex: chunk.StartPos, // Use start position as order index for section chunks
-		}
+		})
 	}
 
 	return results, nil
