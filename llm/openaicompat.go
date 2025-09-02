@@ -20,8 +20,9 @@ type OpenAICompat struct {
 	model   string
 	params  Parameters
 
-	client *http.Client
-	logger *slog.Logger
+	client             *http.Client
+	logger             *slog.Logger
+	ChatTemplateKwargs map[string]interface{}
 }
 
 // NewOpenAICompat creates a new OpenAICompat instance with the specified host URL and model name.
@@ -44,18 +45,19 @@ type ChatMessage struct {
 
 // ChatCompletionRequest represents the request payload for chat completions
 type ChatCompletionRequest struct {
-	Model            string         `json:"model"`
-	Messages         []ChatMessage  `json:"messages"`
-	Temperature      *float32       `json:"temperature,omitempty"`
-	TopP             *float32       `json:"top_p,omitempty"`
-	Stop             []string       `json:"stop,omitempty"`
-	PresencePenalty  *float32       `json:"presence_penalty,omitempty"`
-	FrequencyPenalty *float32       `json:"frequency_penalty,omitempty"`
-	Seed             *int           `json:"seed,omitempty"`
-	LogitBias        map[string]int `json:"logit_bias,omitempty"`
-	Logprobs         *bool          `json:"logprobs,omitempty"`
-	TopLogprobs      *int           `json:"top_logprobs,omitempty"`
-	MaxTokens        *int           `json:"max_tokens,omitempty"`
+	Model              string                 `json:"model"`
+	Messages           []ChatMessage          `json:"messages"`
+	Temperature        *float32               `json:"temperature,omitempty"`
+	TopP               *float32               `json:"top_p,omitempty"`
+	Stop               []string               `json:"stop,omitempty"`
+	PresencePenalty    *float32               `json:"presence_penalty,omitempty"`
+	FrequencyPenalty   *float32               `json:"frequency_penalty,omitempty"`
+	Seed               *int                   `json:"seed,omitempty"`
+	LogitBias          map[string]int         `json:"logit_bias,omitempty"`
+	Logprobs           *bool                  `json:"logprobs,omitempty"`
+	TopLogprobs        *int                   `json:"top_logprobs,omitempty"`
+	MaxTokens          *int                   `json:"max_tokens,omitempty"`
+	ChatTemplateKwargs map[string]interface{} `json:"chat_template_kwargs,omitempty"`
 }
 
 // ChatCompletionResponse represents the response from the chat completion API
@@ -133,11 +135,16 @@ func (o OpenAICompat) chatRequest(messages []ChatMessage) ChatCompletionRequest 
 		req.MaxTokens = o.params.MaxTokens
 	}
 
+	if o.ChatTemplateKwargs != nil {
+		req.ChatTemplateKwargs = o.ChatTemplateKwargs
+	}
+
 	return req
 }
 
 func (o OpenAICompat) sendRequest(ctx context.Context, req ChatCompletionRequest) (*ChatCompletionResponse, error) {
 	jsonData, err := json.Marshal(req)
+	fmt.Printf("jsonData: %s\n", string(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling request: %w", err)
 	}
