@@ -102,6 +102,9 @@ func (o OpenAICompat) chatRequest(messages []ChatMessage) ChatCompletionRequest 
 	req := ChatCompletionRequest{
 		Model:    o.model,
 		Messages: messages,
+		ChatTemplateKwargs: map[string]any{
+			"thinking": false,
+		},
 	}
 
 	if o.params.Temperature != nil {
