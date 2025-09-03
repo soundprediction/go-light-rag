@@ -13,7 +13,7 @@ import (
 
 	"github.com/MegaGrindStone/go-light-rag/internal"
 	llmod "github.com/MegaGrindStone/go-light-rag/llm"
-	"github.com/kaptinlin/jsonrepair"
+	jsonrepair "github.com/RealAlexandreAI/json-repair"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -243,11 +243,10 @@ func llmExtractEntities(
 		sResult = llmod.RemoveThinkTags(sResult)
 		// Parse initial extraction results
 		var sourceParsed llmResult
+
+		sResult, _ = jsonrepair.RepairJSON(sResult)
 		err = json.Unmarshal([]byte(sResult), &sourceParsed)
-		var repaired string
-		if err != nil {
-			repaired, err = jsonrepair.JSONRepair(sResult)
-		}
+
 		if err != nil {
 			if maxRetries < retry {
 				logger.Info("LLM failed to call source: %s, content: %s", source.ID, source.Content)
@@ -258,7 +257,7 @@ func llmExtractEntities(
 			logger.Warn("Retry parse result", "retry", retry, "error", nErr)
 			continue
 		}
-		err = json.Unmarshal([]byte(repaired), &sourceParsed)
+
 		if err != nil {
 			if maxRetries < retry {
 				logger.Info("LLM failed to call source: %s, content: %s", source.ID, source.Content)
@@ -289,16 +288,14 @@ func llmExtractEntities(
 
 			gResult := llmod.RemoveMarkdownBackticks(gleanResult)
 			gResult = llmod.RemoveThinkTags(gResult)
+			gResult, _ = jsonrepair.RepairJSON(gResult)
+
 			// Parse glean results
 			histories = append(histories, gResult)
 
 			var gleanParsed llmResult
 			err = json.Unmarshal([]byte(gResult), &gleanParsed)
 			if err != nil {
-				repaired, err = jsonrepair.JSONRepair(gResult)
-				if err != nil {
-					err = json.Unmarshal([]byte(repaired), &gleanParsed)
-				}
 				if maxRetries < retry {
 					logger.Info("LLM failed to call source: %s, content: %s", source.ID, source.Content)
 					return map[string][]GraphEntity{}, map[string][]GraphRelationship{}, nil
