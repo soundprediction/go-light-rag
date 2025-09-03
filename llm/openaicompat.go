@@ -144,7 +144,7 @@ func (o OpenAICompat) chatRequest(messages []ChatMessage) ChatCompletionRequest 
 
 func (o OpenAICompat) sendRequest(ctx context.Context, req ChatCompletionRequest) (*ChatCompletionResponse, error) {
 	jsonData, err := json.Marshal(req)
-	fmt.Printf("jsonData: %s\n", string(jsonData))
+	// fmt.Printf("jsonData: %s\n", string(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling request: %w", err)
 	}
