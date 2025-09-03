@@ -258,16 +258,7 @@ func llmExtractEntities(
 			continue
 		}
 
-		if err != nil {
-			if maxRetries < retry {
-				logger.Info("LLM failed to call source: %s, content: %s", source.ID, source.Content)
-				return map[string][]GraphEntity{}, map[string][]GraphRelationship{}, nil
-			}
-			nErr := fmt.Errorf("failed to parse llm result: %w", err)
-			retry++
-			logger.Warn("Retry parse result", "retry", retry, "error", nErr)
-			continue
-		}
+
 		results.Entities = append(results.Entities, sourceParsed.Entities...)
 		results.Relationships = append(results.Relationships, sourceParsed.Relationships...)
 
