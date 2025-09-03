@@ -45,19 +45,19 @@ type ChatMessage struct {
 
 // ChatCompletionRequest represents the request payload for chat completions
 type ChatCompletionRequest struct {
-	Model              string                 `json:"model"`
-	Messages           []ChatMessage          `json:"messages"`
-	Temperature        *float32               `json:"temperature,omitempty"`
-	TopP               *float32               `json:"top_p,omitempty"`
-	Stop               []string               `json:"stop,omitempty"`
-	PresencePenalty    *float32               `json:"presence_penalty,omitempty"`
-	FrequencyPenalty   *float32               `json:"frequency_penalty,omitempty"`
-	Seed               *int                   `json:"seed,omitempty"`
-	LogitBias          map[string]int         `json:"logit_bias,omitempty"`
-	Logprobs           *bool                  `json:"logprobs,omitempty"`
-	TopLogprobs        *int                   `json:"top_logprobs,omitempty"`
-	MaxTokens          *int                   `json:"max_tokens,omitempty"`
-	ChatTemplateKwargs map[string]interface{} `json:"chat_template_kwargs,omitempty"`
+	Model              string         `json:"model"`
+	Messages           []ChatMessage  `json:"messages"`
+	Temperature        *float32       `json:"temperature,omitempty"`
+	TopP               *float32       `json:"top_p,omitempty"`
+	Stop               []string       `json:"stop,omitempty"`
+	PresencePenalty    *float32       `json:"presence_penalty,omitempty"`
+	FrequencyPenalty   *float32       `json:"frequency_penalty,omitempty"`
+	Seed               *int           `json:"seed,omitempty"`
+	LogitBias          map[string]int `json:"logit_bias,omitempty"`
+	Logprobs           *bool          `json:"logprobs,omitempty"`
+	TopLogprobs        *int           `json:"top_logprobs,omitempty"`
+	MaxTokens          *int           `json:"max_tokens,omitempty"`
+	ChatTemplateKwargs map[string]any `json:"chat_template_kwargs,omitempty"`
 }
 
 // ChatCompletionResponse represents the response from the chat completion API
