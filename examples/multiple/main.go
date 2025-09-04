@@ -495,7 +495,11 @@ func insert(
 		logger.Info("Inserted document", "id", doc.ID, "duration in milliseconds", time.Since(now).Milliseconds())
 	}()
 
-	return golightrag.Insert(doc, docHandler, storage, llm, logger)
+	sources, err := golightrag.ChunkDocument(doc, docHandler, logger)
+	if err != nil {
+		return fmt.Errorf("failed to chunk document: %w", err)
+	}
+	return golightrag.Insert(sources, docHandler, storage, llm, logger)
 }
 
 func query(

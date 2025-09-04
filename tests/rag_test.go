@@ -715,7 +715,11 @@ func (l lightRAG) insert(path string, handler golightrag.DocumentHandler) error 
 	}
 
 	now := time.Now()
-	if err := golightrag.Insert(doc, handler, l.storage, l.llm, l.logger); err != nil {
+	sources, err := golightrag.ChunkDocument(doc, handler, l.logger)
+	if err != nil {
+		return fmt.Errorf("failed to chunk document: %w", err)
+	}
+	if err := golightrag.Insert(sources, handler, l.storage, l.llm, l.logger); err != nil {
 		return fmt.Errorf("error inserting document: %w", err)
 	}
 

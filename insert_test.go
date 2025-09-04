@@ -79,7 +79,11 @@ func TestInsert(t *testing.T) {
 		}
 
 		// Call the function under test
-		err := golightrag.Insert(doc, handler, storage, mockLLM, logger)
+		sources, err := golightrag.ChunkDocument(doc, handler, logger)
+		if err != nil {
+			t.Fatalf("ChunkDocument failed: %v", err)
+		}
+		err = golightrag.Insert(sources, handler, storage, mockLLM, logger)
 		// Assertions
 		if err != nil {
 			t.Errorf("Expected no error, got %v", err)
@@ -213,7 +217,11 @@ func TestInsert(t *testing.T) {
 		storage := &MockStorage{}
 
 		// Call the function under test
-		err := golightrag.Insert(doc, handler, storage, mockLLM, logger)
+		sources, err := golightrag.ChunkDocument(doc, handler, logger)
+		if err != nil {
+			t.Fatalf("ChunkDocument failed: %v", err)
+		}
+		err = golightrag.Insert(sources, handler, storage, mockLLM, logger)
 
 		// Assertions
 		if err == nil {
@@ -236,7 +244,7 @@ func TestInsert(t *testing.T) {
 		storage := &MockStorage{}
 
 		// Call the function under test
-		err := golightrag.Insert(doc, handler, storage, nil, logger)
+		_, err := golightrag.ChunkDocument(doc, handler, logger)
 
 		// Assertions
 		if err == nil {
@@ -271,7 +279,10 @@ func TestInsert(t *testing.T) {
 		}
 
 		// Call the function under test
-		err := golightrag.Insert(doc, handler, storage, nil, logger)
+		sources, err := golightrag.ChunkDocument(doc, handler, logger)
+		if err == nil {
+			err = golightrag.Insert(sources, handler, storage, nil, logger)
+		}
 
 		// Assertions
 		if err == nil {
@@ -317,7 +328,11 @@ func TestInsert(t *testing.T) {
 		storage := &MockStorage{}
 
 		// Call the function under test
-		err := golightrag.Insert(doc, handler, storage, mockLLM, logger)
+		sources, err := golightrag.ChunkDocument(doc, handler, logger)
+		if err != nil {
+			t.Fatalf("ChunkDocument failed: %v", err)
+		}
+		err = golightrag.Insert(sources, handler, storage, mockLLM, logger)
 
 		// Assertions
 		if err == nil {

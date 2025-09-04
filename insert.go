@@ -61,21 +61,19 @@ type summarizeDescriptionsPromptData struct {
 // GraphFieldSeparator is a constant used to separate fields in a graph.
 const GraphFieldSeparator = "<SEP>"
 
-// Insert processes a document and stores it in the provided storage.
-// It chunks the document content, extracts entities and relationships using the provided
-// document handler, and stores the results in the appropriate storage.
-// It returns an error if any step in the process fails.
-func Insert(doc Document, handler DocumentHandler, storage Storage, llm LLM, logger *slog.Logger) error {
+// ChunkDocument processes a document by chunking its content and generating Source objects with IDs.
+// This function should be called before Insert to prepare the document chunks.
+func ChunkDocument(doc Document, handler DocumentHandler, logger *slog.Logger) ([]Source, error) {
 	content := cleanContent(doc.Content)
 
 	logger = logger.With(
 		slog.String("package", "golightrag"),
-		slog.String("function", "Insert"),
+		slog.String("function", "ChunkDocument"),
 	)
 
 	chunks, err := handler.ChunksDocument(content)
 	if err != nil {
-		return fmt.Errorf("failed to chunk string: %w", err)
+		return nil, fmt.Errorf("failed to chunk string: %w", err)
 	}
 
 	// The chunks returned from the ChunksDocument doesn't have an ID, generate one here
@@ -92,9 +90,23 @@ func Insert(doc Document, handler DocumentHandler, storage Storage, llm LLM, log
 		}
 	}
 
-	logger.Info("Upserting sources", "count", len(chunks))
+	return chunksWithID, nil
+}
 
-	if err := storage.KVUpsertSources(chunksWithID); err != nil {
+// Insert processes pre-chunked sources and stores them in the provided storage.
+// It extracts entities and relationships from the provided source chunks using the 
+// document handler, and stores the results in the appropriate storage.
+// The sources parameter should contain Source objects with IDs already generated.
+// It returns an error if any step in the process fails.
+func Insert(sources []Source, handler DocumentHandler, storage Storage, llm LLM, logger *slog.Logger) error {
+	logger = logger.With(
+		slog.String("package", "golightrag"),
+		slog.String("function", "Insert"),
+	)
+
+	logger.Info("Upserting sources", "count", len(sources))
+
+	if err := storage.KVUpsertSources(sources); err != nil {
 		return fmt.Errorf("failed to upsert sources kv: %w", err)
 	}
 
@@ -103,7 +115,18 @@ func Insert(doc Document, handler DocumentHandler, storage Storage, llm LLM, log
 		llmConcurrencyCount = 1
 	}
 
-	if err := extractEntities(doc.ID, chunks, llm,
+	// Extract document ID from the first source ID for entity extraction
+	// Source IDs are in format "docID-chunk-N", so extract the docID part
+	var docID string
+	if len(sources) > 0 {
+		// Parse docID from source ID (format: "docID-chunk-N")
+		parts := strings.Split(sources[0].ID, "-chunk-")
+		if len(parts) > 0 {
+			docID = parts[0]
+		}
+	}
+
+	if err := extractEntities(docID, sources, llm,
 		handler.EntityExtractionPromptData(), handler.MaxRetries(), llmConcurrencyCount, handler.GleanCount(),
 		handler.MaxSummariesTokenLength(), handler.BackoffDuration(), storage, logger); err != nil {
 		return fmt.Errorf("failed to extract entities: %w", err)

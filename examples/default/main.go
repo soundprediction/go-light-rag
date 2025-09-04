@@ -265,7 +265,11 @@ func insert(
 		Content: docContent,
 	}
 
-	return golightrag.Insert(doc, docHandler, storage, llm, logger)
+	sources, err := golightrag.ChunkDocument(doc, docHandler, logger)
+	if err != nil {
+		return fmt.Errorf("failed to chunk document: %w", err)
+	}
+	return golightrag.Insert(sources, docHandler, storage, llm, logger)
 }
 
 func query(handler golightrag.QueryHandler, store golightrag.Storage, llm golightrag.LLM, logger *slog.Logger) {

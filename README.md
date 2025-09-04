@@ -118,7 +118,14 @@ doc := golightrag.Document{
     Content: documentContent,
 }
 
-err := golightrag.Insert(doc, handler, store, llm, logger)
+// Chunk the document first
+sources, err := golightrag.ChunkDocument(doc, handler, logger)
+if err != nil {
+    return err
+}
+
+// Then insert the chunked sources
+err = golightrag.Insert(sources, handler, store, llm, logger)
 ```
 
 ### Query Processing
