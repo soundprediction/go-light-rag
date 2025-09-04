@@ -87,10 +87,12 @@ type KeyValueStorage interface {
 	// KVSource retrieves a source document chunk by its ID.
 	// Returns an error if the source doesn't exist or can't be retrieved.
 	KVSource(id string) (Source, error)
+	KVUnprocessed(id string) (string, error)
 	// KVUpsertSources creates or updates multiple source document chunks at once.
 	// Each source should be stored with its ID as the key.
 	// This is called during document processing to store chunked documents.
 	KVUpsertSources(sources []Source) error
+	KVUpsertUnprocessed(sources []Source) error
 }
 
 // Storage is a composite interface that combines GraphStorage,
