@@ -61,6 +61,77 @@ type summarizeDescriptionsPromptData struct {
 // GraphFieldSeparator is a constant used to separate fields in a graph.
 const GraphFieldSeparator = "<SEP>"
 
+func InsertChunk(doc Document, handler DocumentHandler, storage Storage, logger *slog.Logger) error {
+	content := cleanContent(doc.Content)
+
+	logger = logger.With(
+		slog.String("package", "golightrag"),
+		slog.String("function", "ChunkDocument"),
+	)
+
+	chunks, err := handler.ChunksDocument(content)
+	if err != nil {
+		return fmt.Errorf("failed to chunk string: %w", err)
+	}
+
+	// The chunks returned from the ChunksDocument doesn't have an ID, generate one here
+	// based on the document ID and the order of the chunks. This ID would be used to retrieve
+	// the chunk in the Query function.
+	chunksWithID := make([]Source, len(chunks))
+	for i, chunk := range chunks {
+		id := chunk.genID(doc.ID)
+		chunksWithID[i] = Source{
+			ID:         id,
+			Content:    chunk.Content,
+			TokenSize:  chunk.TokenSize,
+			OrderIndex: chunk.OrderIndex,
+		}
+	}
+
+	logger.Info("Upserting sources", "count", len(chunks))
+
+	if err := storage.KVUpsertSources(chunksWithID); err != nil {
+		return fmt.Errorf("failed to upsert sources kv: %w", err)
+	}
+
+	if err := storage.KVUpsertUnprocessed(chunksWithID); err != nil {
+		return fmt.Errorf("failed to upsert unprocessed kv: %w", err)
+	}
+
+	return nil
+}
+
+func ProcessUnprocessedChunk(sources []Source, handler DocumentHandler, storage Storage, llm LLM, logger *slog.Logger) error {
+	logger = logger.With(
+		slog.String("package", "golightrag"),
+		slog.String("function", "Insert"),
+	)
+
+	llmConcurrencyCount := handler.ConcurrencyCount()
+	if llmConcurrencyCount == 0 {
+		llmConcurrencyCount = 1
+	}
+
+	// Extract document ID from the first source ID for entity extraction
+	// Source IDs are in format "docID-chunk-N", so extract the docID part
+	var docID string
+	if len(sources) > 0 {
+		// Parse docID from source ID (format: "docID-chunk-N")
+		parts := strings.Split(sources[0].ID, "-chunk-")
+		if len(parts) > 0 {
+			docID = parts[0]
+		}
+	}
+
+	if err := extractEntities(docID, sources, llm,
+		handler.EntityExtractionPromptData(), handler.MaxRetries(), llmConcurrencyCount, handler.GleanCount(),
+		handler.MaxSummariesTokenLength(), handler.BackoffDuration(), storage, logger); err != nil {
+		return fmt.Errorf("failed to extract entities: %w", err)
+	}
+
+	return nil
+}
+
 // Insert processes a document and stores it in the provided storage.
 // It chunks the document content, extracts entities and relationships using the provided
 // document handler, and stores the results in the appropriate storage.
