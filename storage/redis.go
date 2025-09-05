@@ -82,3 +82,48 @@ func (r Redis) KVUpsertSources(sources []golightrag.Source) error {
 
 	return nil
 }
+
+func (r Redis) KVUnprocessed(id string) (string, error) {
+	var result string
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	content, err := r.Client.Get(ctx, id).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return result, fmt.Errorf("source not found")
+		}
+		return result, fmt.Errorf("failed to get source: %w", err)
+	}
+
+	result = content
+
+	return result, nil
+}
+
+func (r Redis) KVUpsertUnprocessed(sources []golightrag.Source) error {
+	pipe := r.Client.Pipeline()
+
+	setCtx, setCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer setCancel()
+
+	// Get the current time
+	t := time.Now()
+	// Format the time using the desired layout
+	formattedTime := t.Format("2006-01-02T15:04:05")
+
+	for _, source := range sources {
+		pipe.Set(setCtx, source.ID, formattedTime, 0)
+	}
+
+	execCtx, execCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer execCancel()
+
+	_, err := pipe.Exec(execCtx)
+	if err != nil {
+		return fmt.Errorf("failed to execute pipeline: %w", err)
+	}
+
+	return nil
+}
