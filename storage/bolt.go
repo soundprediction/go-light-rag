@@ -29,6 +29,12 @@ func NewBolt(path string) (Bolt, error) {
 	}); err != nil {
 		return Bolt{}, fmt.Errorf("failed to create sources bucket: %w", err)
 	}
+	if err := db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte("unprocessed"))
+		return err
+	}); err != nil {
+		return Bolt{}, fmt.Errorf("failed to create unprocessed bucket: %w", err)
+	}
 
 	return Bolt{DB: db}, nil
 }
