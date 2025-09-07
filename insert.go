@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -252,11 +251,6 @@ func extractEntities(
 	return nil
 }
 
-func removeThinkTags(input string) string {
-	re := regexp.MustCompile(`(?s)<think>.*?</think>`)
-	return re.ReplaceAllString(input, "")
-}
-
 func llmExtractEntities(
 	source Source,
 	data EntityExtractionPromptData,
@@ -328,7 +322,6 @@ func llmExtractEntities(
 			logger.Warn("Retry parse result", "retry", retry, "error", nErr)
 			continue
 		}
-
 
 		results.Entities = append(results.Entities, sourceParsed.Entities...)
 		results.Relationships = append(results.Relationships, sourceParsed.Relationships...)
