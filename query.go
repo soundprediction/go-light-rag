@@ -11,6 +11,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	llmod "github.com/MegaGrindStone/go-light-rag/llm"
+	jsonrepair "github.com/RealAlexandreAI/json-repair"
 )
 
 // QueryHandler defines the interface for handling RAG query operations.
@@ -128,7 +131,10 @@ func Query(
 	logger.Debug("Extracted keywords from LLM", "keywords", keywordRes)
 
 	var output keywordExtractionOutput
-	err = json.Unmarshal([]byte(strings.ReplaceAll(keywordRes, "\\", "")), &output)
+	nonthink := llmod.RemoveThinkTags(strings.ReplaceAll(keywordRes, "\\", ""))
+	nonthink = llmod.RemoveMarkdownBackticks(nonthink)
+	repaired, _ := jsonrepair.RepairJSON(nonthink)
+	err = json.Unmarshal([]byte(repaired), &output)
 	if err != nil {
 		return QueryResult{}, fmt.Errorf("failed to unmarshal keyword extraction output: %w", err)
 	}
