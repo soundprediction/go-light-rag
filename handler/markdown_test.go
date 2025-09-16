@@ -301,7 +301,7 @@ End of list.`,
 			if tt.handlerConfig != nil {
 				h = tt.handlerConfig
 			} else {
-				h = handler.NewMarkdownAst()
+				h = handler.NewMarkdownAst(handler.DocumentConfig{})
 			}
 
 			chunks, err := h.ChunksDocument(tt.content)
@@ -355,7 +355,7 @@ func TestMarkdownAst_EntityExtractionPromptData(t *testing.T) {
 	}{
 		{
 			name:        "Default values",
-			markdownAst: handler.NewMarkdownAst(),
+			markdownAst: handler.NewMarkdownAst(handler.DocumentConfig{}),
 			expected: func(data golightrag.EntityExtractionPromptData) bool {
 				return data.Language == "English" &&
 					len(data.EntityTypes) > 0 &&
@@ -401,7 +401,7 @@ func TestMarkdownAst_ConfigMethods(t *testing.T) {
 	}{
 		{
 			name:        "Default MaxRetries",
-			markdownAst: handler.NewMarkdownAst(),
+			markdownAst: handler.NewMarkdownAst(handler.DocumentConfig{}),
 			method:      "MaxRetries",
 			want:        0, // Default value
 		},
@@ -415,7 +415,7 @@ func TestMarkdownAst_ConfigMethods(t *testing.T) {
 		},
 		{
 			name:        "Default ConcurrencyCount",
-			markdownAst: handler.NewMarkdownAst(),
+			markdownAst: handler.NewMarkdownAst(handler.DocumentConfig{}),
 			method:      "ConcurrencyCount",
 			want:        1, // Default value
 		},
@@ -429,7 +429,7 @@ func TestMarkdownAst_ConfigMethods(t *testing.T) {
 		},
 		{
 			name:        "Default GleanCount",
-			markdownAst: handler.NewMarkdownAst(),
+			markdownAst: handler.NewMarkdownAst(handler.DocumentConfig{}),
 			method:      "GleanCount",
 			want:        0, // Default value
 		},
@@ -468,7 +468,7 @@ func TestMarkdownAst_InterfaceImplementation(t *testing.T) {
 	// This test ensures MarkdownAst correctly implements DocumentHandler interface
 	var _ golightrag.DocumentHandler = (*handler.MarkdownAst)(nil)
 	
-	markdownAst := handler.NewMarkdownAst()
+	markdownAst := handler.NewMarkdownAst(handler.DocumentConfig{})
 	
 	// Test that all methods are callable
 	_, err := markdownAst.ChunksDocument("test content")

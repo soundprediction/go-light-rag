@@ -26,11 +26,18 @@ type OpenAICompat struct {
 // NewOpenAICompat creates a new OpenAICompat instance with the specified host URL and model name.
 // The host parameter should be a valid URL pointing to an OpenAI-compatible API server.
 func NewOpenAICompat(host, apiKey string, model string, params Parameters, logger *slog.Logger) OpenAICompat {
+	baseUrl := strings.TrimSuffix(host, "/")
+
+	// Create client configuration with custom base URL
+	config := goopenai.DefaultConfig(apiKey)
+	config.BaseURL = strings.TrimSuffix(host, "/")
+	client := goopenai.NewClientWithConfig(config)
+
 	return OpenAICompat{
-		BaseUrl: strings.TrimSuffix(host, "/"),
+		BaseUrl: baseUrl,
 		model:   model,
 		params:  params,
-		client:  goopenai.NewClient(apiKey),
+		client:  client,
 		logger:  logger.With(slog.String("module", "openaicompat")),
 	}
 }
