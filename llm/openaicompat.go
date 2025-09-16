@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	goopenai "github.com/sashabaranov/go-openai"
 )
 
 // OpenAICompat provides an implementation of the LLM interface for interacting with OpenAI-compatible API services.
@@ -20,19 +22,19 @@ type OpenAICompat struct {
 	model   string
 	params  Parameters
 
-	client             *http.Client
+	client             *goopenai.Client
 	logger             *slog.Logger
 	ChatTemplateKwargs map[string]interface{}
 }
 
 // NewOpenAICompat creates a new OpenAICompat instance with the specified host URL and model name.
 // The host parameter should be a valid URL pointing to an OpenAI-compatible API server.
-func NewOpenAICompat(host, model string, params Parameters, logger *slog.Logger) OpenAICompat {
+func NewOpenAICompat(host, apiKey string, model string, params Parameters, logger *slog.Logger) OpenAICompat {
 	return OpenAICompat{
 		BaseUrl: strings.TrimSuffix(host, "/"),
 		model:   model,
 		params:  params,
-		client:  &http.Client{Timeout: 110 * time.Second},
+		client:  goopenai.NewClient(apiKey),
 		logger:  logger.With(slog.String("module", "openaicompat")),
 	}
 }
