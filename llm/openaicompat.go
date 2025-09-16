@@ -1,14 +1,10 @@
 package llm
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
 	"strings"
 	"time"
 
@@ -148,34 +144,72 @@ func (o OpenAICompat) chatRequest(messages []ChatMessage) ChatCompletionRequest 
 }
 
 func (o OpenAICompat) sendRequest(ctx context.Context, req ChatCompletionRequest) (*ChatCompletionResponse, error) {
-	jsonData, err := json.Marshal(req)
-	// fmt.Printf("jsonData: %s\n", string(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling request: %w", err)
+	// Convert our ChatMessage to goopenai.ChatCompletionMessage
+	messages := make([]goopenai.ChatCompletionMessage, len(req.Messages))
+	for i, msg := range req.Messages {
+		messages[i] = goopenai.ChatCompletionMessage{
+			Role:    msg.Role,
+			Content: msg.Content,
+		}
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", o.BaseUrl+"/chat/completions", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("error creating request: %w", err)
+	// Create OpenAI request
+	openaiReq := goopenai.ChatCompletionRequest{
+		Model:    req.Model,
+		Messages: messages,
 	}
 
-	httpReq.Header.Set("Content-Type", "application/json")
+	// Set optional parameters
+	if req.Temperature != nil {
+		openaiReq.Temperature = *req.Temperature
+	}
+	if req.TopP != nil {
+		openaiReq.TopP = *req.TopP
+	}
+	if req.Stop != nil {
+		openaiReq.Stop = req.Stop
+	}
+	if req.PresencePenalty != nil {
+		openaiReq.PresencePenalty = *req.PresencePenalty
+	}
+	if req.FrequencyPenalty != nil {
+		openaiReq.FrequencyPenalty = *req.FrequencyPenalty
+	}
+	if req.Seed != nil {
+		openaiReq.Seed = req.Seed
+	}
+	if req.LogitBias != nil {
+		openaiReq.LogitBias = req.LogitBias
+	}
+	if req.Logprobs != nil {
+		openaiReq.LogProbs = *req.Logprobs
+	}
+	if req.TopLogprobs != nil {
+		openaiReq.TopLogProbs = *req.TopLogprobs
+	}
+	if req.MaxTokens != nil {
+		openaiReq.MaxTokens = *req.MaxTokens
+	}
 
-	resp, err := o.client.Do(httpReq)
+	// Make the request using the OpenAI client
+	resp, err := o.client.CreateChatCompletion(ctx, openaiReq)
 	if err != nil {
 		return nil, fmt.Errorf("error making request: %w", err)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	// Convert response back to our format
+	chatResp := &ChatCompletionResponse{
+		Choices: make([]struct {
+			Message ChatMessage `json:"message"`
+		}, len(resp.Choices)),
 	}
 
-	var chatResp ChatCompletionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
-		return nil, fmt.Errorf("error decoding response: %w", err)
+	for i, choice := range resp.Choices {
+		chatResp.Choices[i].Message = ChatMessage{
+			Role:    choice.Message.Role,
+			Content: choice.Message.Content,
+		}
 	}
 
-	return &chatResp, nil
+	return chatResp, nil
 }
