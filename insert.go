@@ -61,6 +61,44 @@ type summarizeDescriptionsPromptData struct {
 // GraphFieldSeparator is a constant used to separate fields in a graph.
 const GraphFieldSeparator = "<SEP>"
 
+// InsertChunks processes an array of ContentChunk objects and stores them in the provided storage.
+// It converts ContentChunks to Source objects and stores them for later processing.
+// This is useful when you have pre-chunked content from an external source.
+func InsertChunks(chunks []ContentChunk, storage Storage, logger *slog.Logger) error {
+	logger = logger.With(
+		slog.String("package", "golightrag"),
+		slog.String("function", "InsertChunks"),
+	)
+
+	if len(chunks) == 0 {
+		logger.Warn("No chunks provided")
+		return nil
+	}
+
+	// Convert ContentChunks to Source objects
+	sources := make([]Source, len(chunks))
+	for i, chunk := range chunks {
+		sources[i] = Source{
+			ID:         chunk.ID,
+			Content:    chunk.Text,
+			TokenSize:  0, // Will be calculated if needed
+			OrderIndex: chunk.ChunkIndex,
+		}
+	}
+
+	logger.Info("Upserting sources", "count", len(sources))
+
+	if err := storage.KVUpsertSources(sources); err != nil {
+		return fmt.Errorf("failed to upsert sources kv: %w", err)
+	}
+
+	if err := storage.KVUpsertUnprocessed(sources); err != nil {
+		return fmt.Errorf("failed to upsert unprocessed kv: %w", err)
+	}
+
+	return nil
+}
+
 func InsertChunk(doc Document, handler DocumentHandler, storage Storage, logger *slog.Logger) error {
 	content := cleanContent(doc.Content)
 

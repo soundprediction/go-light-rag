@@ -113,6 +113,68 @@ type Source struct {
 	OrderIndex int
 }
 
+// SourceType defines the type of the content's origin.
+type SourceType string
+
+// Defines the various types of content sources.
+const (
+	SourceTypeFile   SourceType = "file"
+	SourceTypeURL    SourceType = "url"
+	SourceTypeDOI    SourceType = "doi"
+	SourceTypePubMed SourceType = "pubmed"
+)
+
+// Origin specifies the source of the content.
+// The Location will hold the identifier corresponding to the Type.
+// For example, for SourceTypeFile, Location would be the file path.
+type Origin struct {
+	Type     SourceType `json:"type"`
+	Location string     `json:"location"`
+}
+
+// ContentChunk represents a chunk of content that belongs to a parent Content item.
+// This allows for breaking down large content into smaller, manageable pieces
+// while maintaining the relationship to the original content source.
+type ContentChunk struct {
+	// ID is the unique identifier for the chunk, typically a UUID.
+	ID string `json:"id"`
+	// ContentID is the foreign key linking this chunk to its parent Content.
+	ContentID string `json:"content_id"`
+	// ChunkIndex is the sequential position of this chunk within the content (0-based).
+	ChunkIndex int `json:"chunk_index"`
+	// Text is the actual text content of this chunk.
+	Text string `json:"text"`
+	// TextHash is the SHA-256 hash of the text content for deduplication and integrity checking.
+	TextHash string `json:"text_hash"`
+	// StartOffset is the character position where this chunk starts in the original content.
+	StartOffset int `json:"start_offset"`
+	// EndOffset is the character position where this chunk ends in the original content.
+	EndOffset int `json:"end_offset"`
+	// CreatedAt is the timestamp when this chunk was created.
+	CreatedAt time.Time `json:"created_at"`
+	// Origin describes where the content was sourced from.
+	Origin Origin `json:"origin"`
+	// Embeddings are the vector embeddings for this chunk from different models.
+	Embeddings []ContentEmbedding `json:"embeddings,omitempty"`
+}
+
+// ContentEmbedding stores vector embeddings for content chunks.
+// This allows multiple embeddings per chunk for different embedding models.
+type ContentEmbedding struct {
+	// ID is the unique identifier for the embedding, typically a UUID.
+	ID string `json:"id"`
+	// ChunkID is the foreign key linking this embedding to its content chunk.
+	ChunkID string `json:"chunk_id"`
+	// Model is the name/identifier of the embedding model used.
+	Model string `json:"model"`
+	// Vector is the actual embedding vector.
+	Vector []float32 `json:"vector"`
+	// Dimensions is the number of dimensions in the embedding vector.
+	Dimensions int `json:"dimensions"`
+	// CreatedAt is the timestamp when this embedding was created.
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // GraphEntity represents an entity in the knowledge graph.
 // It contains information about the entity's name, type,
 // descriptions, sources, and creation timestamp.

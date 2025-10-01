@@ -123,6 +123,17 @@ func (m *MockStorage) KVUpsertSources([]golightrag.Source) error {
 	return m.kvUpsertSourcesErr
 }
 
+func (m *MockStorage) KVUnprocessed(id string) (string, error) {
+	if source, ok := m.sources[id]; ok {
+		return source.Content, nil
+	}
+	return "", errors.New("source not found")
+}
+
+func (m *MockStorage) KVUpsertUnprocessed([]golightrag.Source) error {
+	return nil
+}
+
 func (m *MockStorage) GraphEntity(name string) (golightrag.GraphEntity, error) {
 	m.graphEntityCalled = true
 	if m.graphEntityErr != nil {

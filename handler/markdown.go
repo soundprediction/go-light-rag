@@ -360,6 +360,7 @@ func (ac *ASTChunker) chunkBySections(sections []Section, fullText string) []Chu
 	return chunks
 }
 
+
 // chunkSectionByParagraphs splits a section into chunks at paragraph boundaries
 func (ac *ASTChunker) chunkSectionByParagraphs(section Section) []Chunk {
 	var chunks []Chunk
