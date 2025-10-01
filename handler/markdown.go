@@ -11,6 +11,8 @@ import (
 	"github.com/MegaGrindStone/go-light-rag/internal"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/extension"
+	gast "github.com/yuin/goldmark/extension/ast"
 	"github.com/yuin/goldmark/text"
 )
 
@@ -36,9 +38,9 @@ type ChunkingOptions struct {
 // DefaultMarkdownChunkingOptions returns sensible defaults for Markdown
 func DefaultMarkdownChunkingOptions() ChunkingOptions {
 	return ChunkingOptions{
-		MaxChunkSize:         1500,
-		MinChunkSize:         200,
-		OverlapSize:          50,
+		MaxChunkSize:         1200,
+		MinChunkSize:         100,
+		OverlapSize:          0,
 		SentenceWeight:       0.3,
 		ParagraphWeight:      0.5,
 		HeadingWeight:        1.0,
@@ -47,7 +49,7 @@ func DefaultMarkdownChunkingOptions() ChunkingOptions {
 		TableWeight:          0.8,
 		BlockquoteWeight:     0.6,
 		HorizontalRuleWeight: 0.8,
-		PreserveFormatting:   true,
+		PreserveFormatting:   false,
 		RespectCodeBlocks:    true,
 		RespectTables:        true,
 		HeaderHierarchy:      true,
@@ -106,7 +108,7 @@ type ASTChunker struct {
 func NewASTChunker(options ChunkingOptions) *ASTChunker {
 	return &ASTChunker{
 		options: options,
-		parser:  goldmark.New(),
+		parser:  goldmark.New(goldmark.WithExtensions(extension.Table)),
 	}
 }
 
@@ -118,8 +120,13 @@ func NewMarkdownChunker(options ChunkingOptions) *ASTChunker {
 // ChunkMarkdown performs AST-based section-aware chunking on Markdown text
 func (ac *ASTChunker) ChunkMarkdown(content string) []Chunk {
 	if len(content) <= ac.options.MaxChunkSize {
+		text := content
+		if !ac.options.PreserveFormatting {
+			text = strings.TrimSpace(text)
+		}
+
 		return []Chunk{{
-			Text:      content,
+			Text:      text,
 			StartPos:  0,
 			EndPos:    len(content),
 			ChunkType: "complete",
@@ -323,6 +330,15 @@ func (ac *ASTChunker) astNodeToElement(node ast.Node, source []byte) MarkdownEle
 			Metadata: make(map[string]interface{}),
 		}
 
+	case *gast.Table:
+		return MarkdownElement{
+			Type:     "table",
+			StartPos: start,
+			EndPos:   stop,
+			Content:  content,
+			Metadata: make(map[string]interface{}),
+		}
+
 	default:
 		return MarkdownElement{
 			Type:     "unknown",
@@ -338,15 +354,28 @@ func (ac *ASTChunker) astNodeToElement(node ast.Node, source []byte) MarkdownEle
 func (ac *ASTChunker) chunkBySections(sections []Section, fullText string) []Chunk {
 	var chunks []Chunk
 
+	// If HeaderHierarchy is enabled, try to merge related subsections
+	if ac.options.HeaderHierarchy {
+		sections = ac.mergeSubsections(sections, fullText)
+	}
+
 	for _, section := range sections {
 		if len(section.Text) <= ac.options.MaxChunkSize {
-			// Section fits in one chunk
+			// Section fits in one chunk - score based on dominant element type
+			score := ac.calculateSectionScore(section)
+			chunkType := ac.determineSectionType(section)
+
+			text := section.Text
+			if !ac.options.PreserveFormatting {
+				text = strings.TrimSpace(text)
+			}
+
 			chunks = append(chunks, Chunk{
-				Text:         strings.TrimSpace(section.Text),
+				Text:         text,
 				StartPos:     section.StartPos,
 				EndPos:       section.EndPos,
-				ChunkType:    "section",
-				Score:        1.0,
+				ChunkType:    chunkType,
+				Score:        score,
 				HeadingLevel: section.Level,
 				Metadata:     map[string]interface{}{"section": true},
 			})
@@ -357,14 +386,195 @@ func (ac *ASTChunker) chunkBySections(sections []Section, fullText string) []Chu
 		}
 	}
 
+	// Apply overlap if configured
+	if ac.options.OverlapSize > 0 {
+		chunks = ac.applyOverlap(chunks, fullText)
+	}
+
 	return chunks
 }
 
+// mergeSubsections merges smaller subsections with their parent sections when appropriate
+func (ac *ASTChunker) mergeSubsections(sections []Section, fullText string) []Section {
+	if len(sections) <= 1 {
+		return sections
+	}
+
+	var merged []Section
+	i := 0
+
+	for i < len(sections) {
+		currentSection := sections[i]
+
+		// Try to merge consecutive subsections with smaller heading levels
+		j := i + 1
+		totalSize := len(currentSection.Text)
+
+		// Look ahead for subsections that could be merged
+		for j < len(sections) {
+			nextSection := sections[j]
+
+			// Only merge if next section is a subsection (higher level number = lower importance)
+			if nextSection.Level <= currentSection.Level {
+				break
+			}
+
+			// Check if merging would exceed max chunk size
+			if totalSize+len(nextSection.Text) > ac.options.MaxChunkSize {
+				break
+			}
+
+			totalSize += len(nextSection.Text)
+			j++
+		}
+
+		// If we found subsections to merge
+		if j > i+1 {
+			// Merge sections i through j-1
+			mergedSection := Section{
+				Heading:  currentSection.Heading,
+				Content:  []MarkdownElement{},
+				StartPos: currentSection.StartPos,
+				EndPos:   sections[j-1].EndPos,
+				Level:    currentSection.Level,
+				Text:     "",
+			}
+
+			// Combine content from all merged sections
+			for k := i; k < j; k++ {
+				mergedSection.Content = append(mergedSection.Content, sections[k].Content...)
+			}
+
+			// Reconstruct text
+			mergedSection.Text = fullText[mergedSection.StartPos:mergedSection.EndPos]
+
+			merged = append(merged, mergedSection)
+			i = j
+		} else {
+			// No subsections to merge, keep current section as-is
+			merged = append(merged, currentSection)
+			i++
+		}
+	}
+
+	return merged
+}
+
+// calculateSectionScore determines the boundary score based on section content
+func (ac *ASTChunker) calculateSectionScore(section Section) float64 {
+	// Start with heading weight if there's a heading
+	if section.Heading != nil {
+		return ac.options.HeadingWeight
+	}
+
+	// Otherwise, use the highest weight element in the section
+	maxWeight := 0.0
+	for _, element := range section.Content {
+		weight := ac.getElementWeight(element.Type)
+		if weight > maxWeight {
+			maxWeight = weight
+		}
+	}
+
+	if maxWeight > 0 {
+		return maxWeight
+	}
+
+	// Default to paragraph weight
+	return ac.options.ParagraphWeight
+}
+
+// determineSectionType returns the dominant element type in a section
+func (ac *ASTChunker) determineSectionType(section Section) string {
+	if section.Heading != nil {
+		return "section"
+	}
+
+	// Count element types
+	typeCounts := make(map[string]int)
+	for _, element := range section.Content {
+		typeCounts[element.Type]++
+	}
+
+	// Find the most common type
+	maxCount := 0
+	dominantType := "mixed"
+	for typ, count := range typeCounts {
+		if count > maxCount {
+			maxCount = count
+			dominantType = typ
+		}
+	}
+
+	return dominantType
+}
+
+// getElementWeight returns the configured weight for a given element type
+func (ac *ASTChunker) getElementWeight(elementType string) float64 {
+	switch elementType {
+	case "code_block":
+		return ac.options.CodeBlockWeight
+	case "table":
+		return ac.options.TableWeight
+	case "list":
+		return ac.options.ListWeight
+	case "blockquote":
+		return ac.options.BlockquoteWeight
+	case "horizontal_rule":
+		return ac.options.HorizontalRuleWeight
+	case "paragraph":
+		return ac.options.ParagraphWeight
+	case "heading":
+		return ac.options.HeadingWeight
+	default:
+		return 0.5
+	}
+}
+
+// applyOverlap adds overlapping content between consecutive chunks
+func (ac *ASTChunker) applyOverlap(chunks []Chunk, fullText string) []Chunk {
+	if len(chunks) <= 1 || ac.options.OverlapSize == 0 {
+		return chunks
+	}
+
+	overlappedChunks := make([]Chunk, len(chunks))
+
+	for i, chunk := range chunks {
+		newChunk := chunk
+
+		// Add overlap from previous chunk (suffix of previous)
+		if i > 0 {
+			prevChunk := chunks[i-1]
+			overlapText := ""
+
+			// Get last N characters from previous chunk
+			if len(prevChunk.Text) > ac.options.OverlapSize {
+				overlapText = prevChunk.Text[len(prevChunk.Text)-ac.options.OverlapSize:]
+			} else {
+				overlapText = prevChunk.Text
+			}
+
+			// Try to start overlap at a word boundary
+			if idx := strings.LastIndex(overlapText, " "); idx > 0 {
+				overlapText = overlapText[idx+1:]
+			}
+
+			newChunk.Text = overlapText + " " + chunk.Text
+		}
+
+		overlappedChunks[i] = newChunk
+	}
+
+	return overlappedChunks
+}
 
 // chunkSectionByParagraphs splits a section into chunks at paragraph boundaries
 func (ac *ASTChunker) chunkSectionByParagraphs(section Section) []Chunk {
 	var chunks []Chunk
 	text := section.Text
+
+	// Find special elements to protect from splitting
+	protectedRanges := ac.findProtectedRanges(section)
 
 	// Find paragraph boundaries within the section
 	paragraphs := ac.findParagraphBoundaries(text)
@@ -383,10 +593,30 @@ func (ac *ASTChunker) chunkSectionByParagraphs(section Section) []Chunk {
 
 		// Check if adding this paragraph would exceed chunk size
 		if len(currentContent) > 0 && len(currentContent)+len(paragraphText) > ac.options.MaxChunkSize {
+			// Check if we're about to split a protected range
+			chunkEnd := currentStart
+			if ac.wouldSplitProtectedRange(section.StartPos, section.StartPos+chunkEnd, protectedRanges) {
+				// Try to include the entire protected range or exclude it entirely
+				adjustedEnd := ac.adjustBoundaryForProtectedRanges(section.StartPos, section.StartPos+chunkEnd, protectedRanges)
+				if adjustedEnd != section.StartPos+chunkEnd {
+					// Adjust the chunk boundary
+					relativeEnd := adjustedEnd - section.StartPos
+					if relativeEnd > currentStart && relativeEnd < paragraphEnd {
+						currentContent = text[currentStart-len(currentContent) : relativeEnd]
+						currentStart = relativeEnd
+					}
+				}
+			}
+
 			// Finalize current chunk
 			if len(currentContent) >= ac.options.MinChunkSize || len(chunks) == 0 {
+				text := currentContent
+				if !ac.options.PreserveFormatting {
+					text = strings.TrimSpace(text)
+				}
+
 				chunks = append(chunks, Chunk{
-					Text:         strings.TrimSpace(currentContent),
+					Text:         text,
 					StartPos:     section.StartPos + (currentStart - len(currentContent)),
 					EndPos:       section.StartPos + currentStart,
 					ChunkType:    "section_paragraph",
@@ -406,19 +636,99 @@ func (ac *ASTChunker) chunkSectionByParagraphs(section Section) []Chunk {
 	}
 
 	// Add final chunk if there's remaining content
-	if len(strings.TrimSpace(currentContent)) > 0 {
-		chunks = append(chunks, Chunk{
-			Text:         strings.TrimSpace(currentContent),
-			StartPos:     section.StartPos + (currentStart - len(currentContent)),
-			EndPos:       section.EndPos,
-			ChunkType:    "section_paragraph",
-			Score:        ac.options.ParagraphWeight,
-			HeadingLevel: section.Level,
-			Metadata:     map[string]interface{}{"section": true, "split_method": "paragraph"},
-		})
+	trimmedContent := strings.TrimSpace(currentContent)
+	if len(trimmedContent) > 0 {
+		// If the final chunk is too small, try to merge it with the previous chunk
+		if len(currentContent) < ac.options.MinChunkSize && len(chunks) > 0 {
+			// Merge with previous chunk
+			lastChunk := &chunks[len(chunks)-1]
+			mergeSep := "\n\n"
+			if ac.options.PreserveFormatting {
+				lastChunk.Text = lastChunk.Text + mergeSep + currentContent
+			} else {
+				lastChunk.Text = lastChunk.Text + mergeSep + trimmedContent
+			}
+			lastChunk.EndPos = section.EndPos
+		} else {
+			text := currentContent
+			if !ac.options.PreserveFormatting {
+				text = trimmedContent
+			}
+
+			chunks = append(chunks, Chunk{
+				Text:         text,
+				StartPos:     section.StartPos + (currentStart - len(currentContent)),
+				EndPos:       section.EndPos,
+				ChunkType:    "section_paragraph",
+				Score:        ac.options.ParagraphWeight,
+				HeadingLevel: section.Level,
+				Metadata:     map[string]interface{}{"section": true, "split_method": "paragraph"},
+			})
+		}
 	}
 
 	return chunks
+}
+
+// ProtectedRange represents a range that should not be split
+type ProtectedRange struct {
+	StartPos int
+	EndPos   int
+	Type     string // "code_block" or "table"
+}
+
+// findProtectedRanges identifies code blocks and tables that shouldn't be split
+func (ac *ASTChunker) findProtectedRanges(section Section) []ProtectedRange {
+	var ranges []ProtectedRange
+
+	for _, element := range section.Content {
+		// Protect code blocks if RespectCodeBlocks is enabled
+		if ac.options.RespectCodeBlocks && element.Type == "code_block" {
+			ranges = append(ranges, ProtectedRange{
+				StartPos: element.StartPos,
+				EndPos:   element.EndPos,
+				Type:     "code_block",
+			})
+		}
+
+		// Protect tables if RespectTables is enabled
+		if ac.options.RespectTables && element.Type == "table" {
+			ranges = append(ranges, ProtectedRange{
+				StartPos: element.StartPos,
+				EndPos:   element.EndPos,
+				Type:     "table",
+			})
+		}
+	}
+
+	return ranges
+}
+
+// wouldSplitProtectedRange checks if a chunk boundary would split a protected range
+func (ac *ASTChunker) wouldSplitProtectedRange(chunkStart, chunkEnd int, ranges []ProtectedRange) bool {
+	for _, r := range ranges {
+		// Check if the chunk boundary falls inside a protected range
+		if chunkEnd > r.StartPos && chunkEnd < r.EndPos {
+			return true
+		}
+	}
+	return false
+}
+
+// adjustBoundaryForProtectedRanges moves a chunk boundary to avoid splitting protected ranges
+func (ac *ASTChunker) adjustBoundaryForProtectedRanges(chunkStart, chunkEnd int, ranges []ProtectedRange) int {
+	for _, r := range ranges {
+		// If chunk end falls inside a protected range
+		if chunkEnd > r.StartPos && chunkEnd < r.EndPos {
+			// Try to end before the protected range
+			if r.StartPos > chunkStart {
+				return r.StartPos
+			}
+			// Otherwise, include the entire protected range
+			return r.EndPos
+		}
+	}
+	return chunkEnd
 }
 
 // findParagraphBoundaries identifies paragraph boundaries within text
@@ -466,8 +776,13 @@ func (ac *ASTChunker) chunkSectionBySentences(section Section) []Chunk {
 		if len(currentContent) > 0 && len(currentContent)+len(sentenceText) > ac.options.MaxChunkSize {
 			// Finalize current chunk
 			if len(currentContent) >= ac.options.MinChunkSize || len(chunks) == 0 {
+				text := currentContent
+				if !ac.options.PreserveFormatting {
+					text = strings.TrimSpace(text)
+				}
+
 				chunks = append(chunks, Chunk{
-					Text:         strings.TrimSpace(currentContent),
+					Text:         text,
 					StartPos:     section.StartPos + (currentStart - len(currentContent)),
 					EndPos:       section.StartPos + currentStart,
 					ChunkType:    "section_sentence",
@@ -487,16 +802,35 @@ func (ac *ASTChunker) chunkSectionBySentences(section Section) []Chunk {
 	}
 
 	// Add final chunk if there's remaining content
-	if len(strings.TrimSpace(currentContent)) > 0 {
-		chunks = append(chunks, Chunk{
-			Text:         strings.TrimSpace(currentContent),
-			StartPos:     section.StartPos + (currentStart - len(currentContent)),
-			EndPos:       section.EndPos,
-			ChunkType:    "section_sentence",
-			Score:        ac.options.SentenceWeight,
-			HeadingLevel: section.Level,
-			Metadata:     map[string]interface{}{"section": true, "split_method": "sentence"},
-		})
+	trimmedContent := strings.TrimSpace(currentContent)
+	if len(trimmedContent) > 0 {
+		// If the final chunk is too small, try to merge it with the previous chunk
+		if len(currentContent) < ac.options.MinChunkSize && len(chunks) > 0 {
+			// Merge with previous chunk
+			lastChunk := &chunks[len(chunks)-1]
+			mergeSep := " "
+			if ac.options.PreserveFormatting {
+				lastChunk.Text = lastChunk.Text + mergeSep + currentContent
+			} else {
+				lastChunk.Text = lastChunk.Text + mergeSep + trimmedContent
+			}
+			lastChunk.EndPos = section.EndPos
+		} else {
+			text := currentContent
+			if !ac.options.PreserveFormatting {
+				text = trimmedContent
+			}
+
+			chunks = append(chunks, Chunk{
+				Text:         text,
+				StartPos:     section.StartPos + (currentStart - len(currentContent)),
+				EndPos:       section.EndPos,
+				ChunkType:    "section_sentence",
+				Score:        ac.options.SentenceWeight,
+				HeadingLevel: section.Level,
+				Metadata:     map[string]interface{}{"section": true, "split_method": "sentence"},
+			})
+		}
 	}
 
 	return chunks
@@ -547,8 +881,13 @@ func (ac *ASTChunker) chunkSectionByWords(section Section) []Chunk {
 	// Simple word-boundary chunking as absolute fallback
 	chunkSize := ac.options.MaxChunkSize
 	if len(text) <= chunkSize {
+		chunkText := text
+		if !ac.options.PreserveFormatting {
+			chunkText = strings.TrimSpace(text)
+		}
+
 		return []Chunk{{
-			Text:         strings.TrimSpace(text),
+			Text:         chunkText,
 			StartPos:     section.StartPos,
 			EndPos:       section.EndPos,
 			ChunkType:    "section_word",
@@ -570,8 +909,12 @@ func (ac *ASTChunker) chunkSectionByWords(section Section) []Chunk {
 		}
 
 		chunkText := text[i:end]
+		if !ac.options.PreserveFormatting {
+			chunkText = strings.TrimSpace(chunkText)
+		}
+
 		chunks = append(chunks, Chunk{
-			Text:         strings.TrimSpace(chunkText),
+			Text:         chunkText,
 			StartPos:     section.StartPos + i,
 			EndPos:       section.StartPos + end,
 			ChunkType:    "section_word",
@@ -674,6 +1017,7 @@ type MarkdownAst struct {
 	EntityTypes              []string
 	Language                 string
 	EntityExtractionExamples []golightrag.EntityExtractionPromptExample
+	EmbeddingModel           string
 
 	// Configuration for RAG operations
 	Config DocumentConfig
@@ -711,7 +1055,7 @@ func (m *MarkdownAst) ChunksDocument(content string) ([]golightrag.Source, error
 			continue
 		}
 
-		tokenCount, err := internal.CountTokens(trimmedContent)
+		tokenCount, err := internal.CountTokensTokenizers(trimmedContent, m.EmbeddingModel)
 		if err != nil {
 			return nil, fmt.Errorf("failed to count tokens for chunk: %w", err)
 		}
