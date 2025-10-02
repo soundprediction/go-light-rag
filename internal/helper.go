@@ -3,60 +3,35 @@ package internal
 import (
 	"fmt"
 
-	"github.com/daulet/tokenizers"
+	"github.com/MegaGrindStone/go-light-rag/llm"
 	"github.com/tiktoken-go/tokenizer"
 )
 
 func EncodeStringByTokenizers(content, model string) ([]uint, error) {
 	// Use default model if not specified
 	if model == "" {
-		model = "google-bert/bert-base-uncased"
+		model = "Qwen/Qwen1.5-0.5B"
 	}
 
 	// Load tokenizer from HuggingFace model
-	tk, err := tokenizers.FromPretrained(model)
+	tk, err := llm.DownloadTokenizer(model)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load tokenizer for model %s: %w", model, err)
 	}
-	defer tk.Close()
 
 	// Encode the content (without special tokens to match tiktoken behavior)
-	ids, _ := tk.Encode(content, false)
+	ids, err := tk.Encode(content)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode string: %w", err)
+	}
 
-	// Convert []uint32 to []uint
+	// Convert []int to []uint
 	result := make([]uint, len(ids))
 	for i, id := range ids {
 		result[i] = uint(id)
 	}
 
 	return result, nil
-}
-
-// DecodeStringByTokenizers decodes token IDs back into a string using a HuggingFace tokenizer.
-// It takes a slice of token IDs, the model name, and returns the decoded string and an error if decoding fails.
-func DecodeStringByTokenizers(tokenIDs []uint, model string) (string, error) {
-	// Use default model if not specified
-	if model == "" {
-		model = "google-bert/bert-base-uncased"
-	}
-
-	// Load tokenizer from HuggingFace model
-	tk, err := tokenizers.FromPretrained(model)
-	if err != nil {
-		return "", fmt.Errorf("failed to load tokenizer for model %s: %w", model, err)
-	}
-	defer tk.Close()
-
-	// Convert []uint to []uint32
-	ids := make([]uint32, len(tokenIDs))
-	for i, id := range tokenIDs {
-		ids[i] = uint32(id)
-	}
-
-	// Decode the token IDs (without skipping special tokens to match tiktoken behavior)
-	text := tk.Decode(ids, false)
-
-	return text, nil
 }
 
 // EncodeStringByTiktoken encodes a string into token IDs using the GPT-4o tokenizer.
