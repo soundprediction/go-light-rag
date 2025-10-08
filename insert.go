@@ -13,7 +13,7 @@ import (
 
 	"github.com/MegaGrindStone/go-light-rag/internal"
 	llmod "github.com/MegaGrindStone/go-light-rag/llm"
-	jsonrepair "github.com/RealAlexandreAI/json-repair"
+	jsonrepair "github.com/kaptinlin/jsonrepair"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -353,7 +353,7 @@ func llmExtractEntities(
 		// Parse initial extraction results
 		var sourceParsed llmResult
 
-		sResult, _ = jsonrepair.RepairJSON(sResult)
+		sResult, _ = jsonrepair.JSONRepair(sResult)
 		err = json.Unmarshal([]byte(sResult), &sourceParsed)
 
 		if err != nil {
@@ -397,7 +397,7 @@ func llmExtractEntities(
 
 			gResult := llmod.RemoveMarkdownBackticks(gleanResult)
 			gResult = llmod.RemoveThinkTags(gResult)
-			gResult, _ = jsonrepair.RepairJSON(gResult)
+			gResult, _ = jsonrepair.JSONRepair(gResult)
 
 			// Parse glean results
 			histories = append(histories, gResult)

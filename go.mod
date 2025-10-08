@@ -1,14 +1,12 @@
 module github.com/MegaGrindStone/go-light-rag
 
-go 1.24.0
-
-toolchain go1.24.1
+go 1.24.7
 
 require (
-	github.com/RealAlexandreAI/json-repair v0.0.14
 	github.com/cespare/xxhash v1.1.0
 	github.com/dlclark/regexp2 v1.11.5
 	github.com/google/uuid v1.6.0
+	github.com/kaptinlin/jsonrepair v0.2.4
 	github.com/kuzudb/go-kuzu v0.11.0
 	github.com/milvus-io/milvus/client/v2 v2.5.1
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.0
@@ -17,7 +15,7 @@ require (
 	github.com/redis/go-redis/v9 v9.7.3
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/sashabaranov/go-openai v1.38.0
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	github.com/tiktoken-go/tokenizer v0.6.0
 	github.com/yuin/goldmark v1.7.13
 	go.etcd.io/bbolt v1.4.0

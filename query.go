@@ -13,7 +13,7 @@ import (
 	"time"
 
 	llmod "github.com/MegaGrindStone/go-light-rag/llm"
-	jsonrepair "github.com/RealAlexandreAI/json-repair"
+	jsonrepair "github.com/kaptinlin/jsonrepair"
 )
 
 // QueryHandler defines the interface for handling RAG query operations.
@@ -133,7 +133,7 @@ func Query(
 	var output keywordExtractionOutput
 	nonthink := llmod.RemoveThinkTags(strings.ReplaceAll(keywordRes, "\\", ""))
 	nonthink = llmod.RemoveMarkdownBackticks(nonthink)
-	repaired, _ := jsonrepair.RepairJSON(nonthink)
+	repaired, _ := jsonrepair.JSONRepair(nonthink)
 	err = json.Unmarshal([]byte(repaired), &output)
 	if err != nil {
 		return QueryResult{}, fmt.Errorf("failed to unmarshal keyword extraction output: %w", err)
